@@ -1,0 +1,93 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+
+# Your rule content
+
+- You can @ files here
+- You can use markdown but dont have to
+
+FOLLOW THIS ASSIGNMENT AT ALL TIMES USE BEST PRACTICES FOR BEST SCORE
+
+Assignment 2: Azure Infrastructure-as-Code (10% PE)
+Inleverdatum: zo 30 mrt 2025 23:59Inleverdatum: zo 30 mrt 2025 23:59
+Niet beoordeeld, 20 punten mogelijk20 punten mogelijk
+Poging
+In voortgang
+EERSTVOLGENDE: Opdracht inleveren
+Onbeperkt aantal pogingen toegestaan
+Beschikbaar: 10 mrt 2025 12:30 tot 30 mrt 2025 23:59Beschikbaar: 10 mrt 2025 12:30 tot 30 mrt 2025 23:59
+
+This is an individual assignment. You will deploy the infamous CRUD app to Azure, and this time using code!
+
+Provide code with comments and in a git repository (when only using Infrastructure-as-Code) or a document (when using manual steps) describing how to perform the task assigned to you. You will demonstrate and prove that you understand what you have set up live to a teacher during the lesson on 23/3.
+
+    Do not copy from each other or any other sources. 
+    Write a short introduction. Explain the context and the assignment.
+    Add a Azure design diagram of your implementation. Use the Azure Icon set on diagrams.net.
+    Describe every step clearly  and concisely. 
+    Save Azure credits and resources. You don't need 16GB of memory to run this app!
+    Delete all resources (in the Azure Portal, go to "All Resources" and delete everything there) after you have completed and showed the assignment to save your Azure credit!
+    Use readable screenshots! Make sure that your initials are part of the Azure resource names.
+    Keep it practical! This is not an essay where you research all Azure functionalities.
+
+    Now, let's go over the steps that you need to complete this assignment:
+
+Step 1: Learn about Infrastructure-as-Code and Bicep templates
+
+First, let's freshen up the concept of IaC en learn how Bicep templates can be used to automatically provision resources on Azure.
+Follow these MS Learn Tutorials:
+MS Learn - Intro to IaC
+Koppelingen naar een externe site.
+MS Learn - Build your first Bicep template
+
+Koppelingen naar een externe site.
+Step 2: Build the container image
+
+    Build a container image based on https://github.com/gurkanakdeniz/example-flask-crud 
+
+    Koppelingen naar een externe site.
+    If you have completed the previous assignment, you already have this.
+
+Step 3: Create Azure Container Registry (ACR)
+
+    Create an Azure Container Registry using Bicep and push the image: https://learn.microsoft.com/en-us/azure/container-instances/container-instances-tutorial-prepare-acr 
+
+    Koppelingen naar een externe site.
+    Create an ACR token using Azure CLI or Bicep that allows least privilege access to the container registry.
+
+Step 4: Deploy the container to Azure Container Instance
+
+    Use a Bicep template to deploy the container to ACI: https://learn.microsoft.com/en-us/azure/container-instances/container-instances-quickstart-bicep 
+
+    Koppelingen naar een externe site.
+    You should be able to access the app from your laptop.
+
+Step 5: Implement best practices
+
+    Change and add to your bicep code to implement the best practices also stated in assignment 1
+        The application has to run within a dedicated, newly created vnet and subnet. Create these using bicep as well.
+        The application needs a public IP
+        The application will serve HTTP on port 80
+        Only required traffic should be allowed to flow in and out of the container and subnet
+        All container logs are sent to and viewable in Azure Monitor.
+
+Azure IaC
+Criteria
+Punten
+Manual build
+langere beschrijving weergeven
+/8 ptn
+Basic IaC
+langere beschrijving weergeven
+/5 ptn
+Best practices using IaC
+langere beschrijving weergeven
+/5 ptn
+Extra
+langere beschrijving weergeven
+/2 ptn
+
+

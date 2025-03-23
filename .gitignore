@@ -1,0 +1,22 @@
+# Ignore cloned repository
+example-flask-crud/
+.git/
+
+# Ignore node modules
+node_modules/
+
+# Ignore Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Ignore virtual environments
+venv/
+env/
+ENV/
+
+# Ignore VS Code settings
+.vscode/
+
+# Ignore Azure publish profiles
+*.pubxml 
