@@ -21,9 +21,65 @@ resource nsg 'Microsoft.Network/networkSecurityGroups@2023-05-01' = {
           protocol: 'Tcp'
           sourcePortRange: '*'
           destinationPortRange: '80'
-          sourceAddressPrefix: '*'
+          sourceAddressPrefix: 'Internet'
           destinationAddressPrefix: '*'
           description: 'Allow HTTP traffic to the container instance'
+        }
+      }
+      {
+        name: 'DenyAllInbound'
+        properties: {
+          priority: 4000
+          access: 'Deny'
+          direction: 'Inbound'
+          protocol: '*'
+          sourcePortRange: '*'
+          destinationPortRange: '*'
+          sourceAddressPrefix: '*'
+          destinationAddressPrefix: '*'
+          description: 'Deny all other inbound traffic'
+        }
+      }
+      {
+        name: 'AllowAzureMonitorOutbound'
+        properties: {
+          priority: 100
+          access: 'Allow'
+          direction: 'Outbound'
+          protocol: 'Tcp'
+          sourcePortRange: '*'
+          destinationPortRange: '443'
+          sourceAddressPrefix: '*'
+          destinationAddressPrefix: 'AzureMonitor'
+          description: 'Allow outbound traffic to Azure Monitor'
+        }
+      }
+      {
+        name: 'AllowAzureCROutbound'
+        properties: {
+          priority: 110
+          access: 'Allow'
+          direction: 'Outbound'
+          protocol: 'Tcp'
+          sourcePortRange: '*'
+          destinationPortRange: '443'
+          sourceAddressPrefix: '*'
+          destinationAddressPrefix: 'AzureContainerRegistry'
+          description: 'Allow outbound traffic to Azure Container Registry'
+        }
+      }
+      {
+        name: 'DenyAllOutbound'
+        properties: {
+          priority: 4000
+          access: 'Deny'
+          direction: 'Outbound'
+          protocol: '*'
+          sourcePortRange: '*'
+          destinationPortRange: '*'
+          sourceAddressPrefix: '*'
+          destinationAddressPrefix: '*'
+          description: 'Deny all other outbound traffic'
         }
       }
     ]

@@ -10,14 +10,14 @@ param acrName string
 @description('ACR login server')
 param acrLoginServer string
 
-@description('Subnet ID where the container instance will be deployed')
-param subnetId string
-
 @description('Log Analytics Workspace ID')
 param logAnalyticsWorkspaceId string
 
 @description('Log Analytics Workspace primary key')
 param logAnalyticsWorkspaceKey string
+
+@description('Subnet ID for container instance')
+param subnetId string
 
 @description('Container image name')
 param containerImageName string = 'flask-crud-app:latest'
@@ -65,6 +65,11 @@ resource containerGroup 'Microsoft.ContainerInstance/containerGroups@2023-05-01'
         }
       ]
     }
+    subnetIds: [
+      {
+        id: subnetId
+      }
+    ]
     imageRegistryCredentials: [
       {
         server: acrLoginServer
@@ -72,16 +77,11 @@ resource containerGroup 'Microsoft.ContainerInstance/containerGroups@2023-05-01'
         password: listCredentials(resourceId('Microsoft.ContainerRegistry/registries', acrName), '2023-07-01').passwords[0].value
       }
     ]
-    subnetIds: [
-      {
-        id: subnetId
-        name: 'container-subnet'
-      }
-    ]
     diagnostics: {
       logAnalytics: {
         workspaceId: logAnalyticsWorkspaceId
         workspaceKey: logAnalyticsWorkspaceKey
+        logType: 'ContainerInsights'
       }
     }
   }

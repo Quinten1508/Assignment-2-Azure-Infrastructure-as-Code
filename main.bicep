@@ -10,10 +10,10 @@ param acrAdminUsername string = 'acrAdmin'
 
 // Variables
 var acrName = 'acr${initials}crud'
-var vnetName = 'vnet-${initials}-crud'
-var subnetName = 'subnet-${initials}-container'
 var aciName = 'aci-${initials}-flask-crud'
 var logAnalyticsName = 'la-${initials}-crud'
+var vnetName = 'vnet-${initials}-crud'
+var subnetName = 'subnet-${initials}-aci'
 
 // Container Registry
 module acr './modules/acr.bicep' = {
@@ -34,7 +34,7 @@ module logAnalytics './modules/log-analytics.bicep' = {
   }
 }
 
-// Virtual Network and Subnet
+// Virtual Network and Subnet with NSG
 module network './modules/network.bicep' = {
   name: 'networkDeployment'
   params: {
@@ -52,18 +52,20 @@ module containerInstance './modules/container-instance.bicep' = {
     location: location
     acrName: acrName
     acrLoginServer: acr.outputs.acrLoginServer
-    subnetId: network.outputs.subnetId
     logAnalyticsWorkspaceId: logAnalytics.outputs.workspaceId
     logAnalyticsWorkspaceKey: logAnalytics.outputs.primaryKey
+    subnetId: network.outputs.subnetId
   }
   dependsOn: [
     acr
-    network
     logAnalytics
+    network
   ]
 }
 
 // Outputs
 output acrLoginServer string = acr.outputs.acrLoginServer
 output containerIPAddress string = containerInstance.outputs.containerIPAddress
-output logAnalyticsPortalUrl string = logAnalytics.outputs.portalUrl 
+output logAnalyticsPortalUrl string = logAnalytics.outputs.portalUrl
+output vnetName string = vnetName
+output subnetName string = subnetName 
