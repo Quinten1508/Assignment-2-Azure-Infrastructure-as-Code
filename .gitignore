@@ -19,4 +19,10 @@ ENV/
 .vscode/
 
 # Ignore Azure publish profiles
-*.pubxml 
+*.pubxml
+
+# Ignore Visual Studio Code files
+.vscode/
+
+# Ignore PowerShell execution policy files
+*.ps1.execution-policy 

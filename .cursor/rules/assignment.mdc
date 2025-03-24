@@ -3,6 +3,11 @@ description:
 globs: 
 alwaysApply: true
 ---
+---
+description: 
+globs: 
+alwaysApply: true
+---
 
 # Your rule content
 
@@ -89,5 +94,507 @@ langere beschrijving weergeven
 Extra
 langere beschrijving weergeven
 /2 ptn
+
+tutorial: "Skip to main content
+The future is yours
+Microsoft Build · May 19 – 22, 2025
+
+Learn
+Sign in
+Azure
+Search
+Filter by title
+Container Instances documentation
+Deploy a container instance - CLI
+Deploy a container instance - Portal
+Deploy a container instance - PowerShell
+Deploy a container instance - Bicep
+Deploy a container instance - ARM template
+Deploy a container instance - Terraform
+Deploy a container instance - Docker CLI
+1 - Create container image
+2 - Create container registry
+3 - Deploy application
+Support and troubleshooting
+Learn  Azure  Container Instances 
+Tutorial: Create an Azure container registry and push a container image
+Article
+08/30/2024
+15 contributors
+In this article
+Before you begin
+Create Azure container registry
+Sign in to container registry
+Tag container image
+Show 3 more
+This article is part two of a three-part tutorial. Part one of the tutorial created a Docker container image for a Node.js web application. In this tutorial, you push the image to Azure Container Registry. If you need to create the container image, return to Tutorial 1 – Create container image.
+
+Azure Container Registry is your private Docker registry in Azure. In this tutorial, part two of the series, you:
+
+Create an Azure Container Registry instance with the Azure CLI
+Tag a container image for your Azure container registry
+Upload the image to your registry
+In the next article, the last in the series, you deploy the container from your private registry to Azure Container Instances.
+
+Before you begin
+You must satisfy the following requirements to complete this tutorial:
+
+Azure CLI: You must have Azure CLI version 2.0.29 or later installed on your local computer. To find the version, run az --version. If you need to install or upgrade, see Install the Azure CLI.
+
+Docker: This tutorial assumes a basic understanding of core Docker concepts like containers, container images, and basic docker commands. For a primer on Docker and container basics, see the Docker overview.
+
+Docker: To complete this tutorial, you need Docker installed locally. Docker provides packages that configure the Docker environment on macOS, Windows, and Linux.
+
+ Important
+
+Because the Azure Cloud shell does not include the Docker daemon, you must install both the Azure CLI and Docker Engine on your local computer to complete this tutorial. You cannot use the Azure Cloud Shell for this tutorial.
+
+Create Azure container registry
+Before you create your container registry, you need a resource group to deploy it to. A resource group is a logical collection into which all Azure resources are deployed and managed.
+
+Create a resource group with the az group create command. In the following example, a resource group named myResourceGroup is created in the eastus region:
+
+Azure CLI
+
+Copy
+az group create --name myResourceGroup --location eastus
+Once you create the resource group, create an Azure container registry with the az acr create command. The container registry name must be unique within Azure, and contain 5-50 alphanumeric characters. Replace <acrName> with a unique name for your registry:
+
+Azure CLI
+
+Copy
+az acr create --resource-group myResourceGroup --name <acrName> --sku Basic
+Here's partial output for a new Azure container registry named mycontainerregistry082:
+
+Output
+
+Copy
+{
+  "creationDate": "2020-07-16T21:54:47.297875+00:00",
+  "id": "/subscriptions/<Subscription ID>/resourceGroups/myResourceGroup/providers/Microsoft.ContainerRegistry/registries/mycontainerregistry082",
+  "location": "eastus",
+  "loginServer": "mycontainerregistry082.azurecr.io",
+  "name": "mycontainerregistry082",
+  "provisioningState": "Succeeded",
+  "resourceGroup": "myResourceGroup",
+  "sku": {
+    "name": "Basic",
+    "tier": "Basic"
+  },
+  "status": null,
+  "storageAccount": null,
+  "tags": {},
+  "type": "Microsoft.ContainerRegistry/registries"
+}
+The rest of the tutorial refers to <acrName> as a placeholder for the container registry name that you chose in this step.
+
+Sign in to container registry
+You must sign in to your Azure Container Registry instance before pushing images to it. Use the az acr login command to complete the operation. You must provide the unique name you chose for the container registry when you created it.
+
+Azure CLI
+
+Copy
+az acr login --name <acrName>
+For example:
+
+Azure CLI
+
+Copy
+az acr login --name mycontainerregistry082
+The command returns Login Succeeded once completed:
+
+Output
+
+Copy
+Login Succeeded
+Tag container image
+To push a container image to a private registry like Azure Container Registry, you must first tag the image with the full name of the registry's login server.
+
+First, get the full login server name for your Azure container registry. Run the following az acr show command, and replace <acrName> with the name of registry you created:
+
+Azure CLI
+
+Copy
+
+Open Cloud Shell
+az acr show --name <acrName> --query loginServer --output table
+For example, if your registry is named mycontainerregistry082:
+
+Azure CLI
+
+Copy
+
+Open Cloud Shell
+az acr show --name mycontainerregistry082 --query loginServer --output table
+Output
+
+Copy
+Result
+------------------------
+mycontainerregistry082.azurecr.io
+Now, display the list of your local images with the docker images command:
+
+Bash
+
+Copy
+docker images
+Along with any other images you have on your machine, you should see the aci-tutorial-app image you built in the previous tutorial:
+
+Bash
+
+Copy
+docker images
+Output
+
+Copy
+REPOSITORY          TAG       IMAGE ID        CREATED           SIZE
+aci-tutorial-app    latest    5c745774dfa9    39 minutes ago    68.1 MB
+Tag the aci-tutorial-app image with the login server of your container registry. Also, add the :v1 tag to the end of the image name to indicate the image version number. Replace <acrLoginServer> with the result of the az acr show command you executed earlier.
+
+Bash
+
+Copy
+docker tag aci-tutorial-app <acrLoginServer>/aci-tutorial-app:v1
+Run docker images again to verify the tagging operation:
+
+Bash
+
+Copy
+docker images
+Output
+
+Copy
+REPOSITORY                                            TAG       IMAGE ID        CREATED           SIZE
+aci-tutorial-app                                      latest    5c745774dfa9    39 minutes ago    68.1 MB
+mycontainerregistry082.azurecr.io/aci-tutorial-app    v1        5c745774dfa9    7 minutes ago     68.1 MB
+Push image to Azure Container Registry
+Now that you tagged the aci-tutorial-app image with the full login server name of your private registry, you can push the image to the registry with the docker push command. Replace <acrLoginServer> with the full login server name you obtained in the earlier step.
+
+Bash
+
+Copy
+docker push <acrLoginServer>/aci-tutorial-app:v1
+The push operation should take a few seconds to a few minutes depending on your internet connection, and output is similar to the following example:
+
+Bash
+
+Copy
+docker push mycontainerregistry082.azurecr.io/aci-tutorial-app:v1
+Output
+
+Copy
+The push refers to a repository [mycontainerregistry082.azurecr.io/aci-tutorial-app]
+3db9cac20d49: Pushed
+13f653351004: Pushed
+4cd158165f4d: Pushed
+d8fbd47558a8: Pushed
+44ab46125c35: Pushed
+5bef08742407: Pushed
+v1: digest: sha256:ed67fff971da47175856505585dcd92d1270c3b37543e8afd46014d328f05715 size: 1576
+List images in Azure Container Registry
+To verify that the image you just pushed is indeed in your Azure container registry, list the images in your registry with the az acr repository list command. Replace <acrName> with the name of your container registry.
+
+Azure CLI
+
+Copy
+
+Open Cloud Shell
+az acr repository list --name <acrName> --output table
+For example:
+
+Azure CLI
+
+Copy
+
+Open Cloud Shell
+az acr repository list --name mycontainerregistry082 --output table
+Output
+
+Copy
+Result
+----------------
+aci-tutorial-app
+To see the tags for a specific image, use the az acr repository show-tags command.
+
+Azure CLI
+
+Copy
+
+Open Cloud Shell
+az acr repository show-tags --name <acrName> --repository aci-tutorial-app --output table
+You should see output similar to the following example:
+
+Output
+
+Copy
+--------
+v1
+Next steps
+In this tutorial, you prepared an Azure container registry for use with Azure Container Instances, and pushed a container image to the registry. The following steps were completed:
+
+Created an Azure Container Registry instance with the Azure CLI
+Tagged a container image for Azure Container Registry
+Uploaded an image to Azure Container Registry
+Advance to the next tutorial to learn how to deploy the container to Azure using Azure Container Instances:
+
+
+Feedback
+Was this page helpful?
+
+Provide product feedback |
+Get help at Microsoft Q&A
+Additional resources
+Training
+
+Module
+
+Deploy and use Azure Container Registry - Training
+
+Learn how to create a private registry service for building, storing, and managing container images and related artifacts.
+
+Certification
+
+Microsoft Certified: Azure Administrator Associate - Certifications
+
+Demonstrate key skills to configure, manage, secure, and administer key professional functions in Microsoft Azure.
+
+Documentation
+
+Per-site configuration by policy
+
+Per-site configuration by policy
+
+Tutorial - Prepare container image for deployment - Azure Container Instances
+
+Azure Container Instances tutorial part 1 of 3 - Prepare an app in a container image for deployment to Azure Container Instances
+
+Microsoft Edge Browser Policy Documentation
+
+Windows and Mac documentation for all policies supported by the Microsoft Edge Browser
+
+Show 5 more
+Manage cookies
+Previous Versions
+Blog
+Contribute
+Privacy
+Terms of Use
+Trademarks
+© Microsoft 2025"
+
+tutorial: "Skip to main content
+The future is yours
+Microsoft Build · May 19 – 22, 2025
+
+Learn
+Sign in
+Azure
+Search
+Filter by title
+Container Instances documentation
+Deploy a container instance - CLI
+Deploy a container instance - Portal
+Deploy a container instance - PowerShell
+Deploy a container instance - Bicep
+Deploy a container instance - ARM template
+Deploy a container instance - Terraform
+Deploy a container instance - Docker CLI
+Support and troubleshooting
+Learn  Azure  Container Instances 
+Quickstart: Deploy a container instance in Azure using Bicep
+Article
+08/30/2024
+3 contributors
+In this article
+Prerequisites
+Review the Bicep file
+Deploy the Bicep file
+Review deployed resources
+Show 2 more
+Use Azure Container Instances to run serverless Docker containers in Azure with simplicity and speed. Deploy an application to a container instance on-demand when you don't need a full container orchestration platform like Azure Kubernetes Service. In this quickstart, you use a Bicep file to deploy an isolated Docker container and make its web application available with a public IP address.
+
+Bicep is a domain-specific language (DSL) that uses declarative syntax to deploy Azure resources. It provides concise syntax, reliable type safety, and support for code reuse. Bicep offers the best authoring experience for your infrastructure-as-code solutions in Azure.
+
+Prerequisites
+If you don't have an Azure subscription, create a free account before you begin.
+
+Review the Bicep file
+The Bicep file used in this quickstart is from Azure Quickstart Templates.
+
+Bicep
+
+Copy
+@description('Name for the container group')
+param name string = 'acilinuxpublicipcontainergroup'
+
+@description('Location for all resources.')
+param location string = resourceGroup().location
+
+@description('Container image to deploy. Should be of the form repoName/imagename:tag for images stored in public Docker Hub, or a fully qualified URI for other registries. Images from private registries require additional registry credentials.')
+param image string = 'mcr.microsoft.com/azuredocs/aci-helloworld'
+
+@description('Port to open on the container and the public IP address.')
+param port int = 80
+
+@description('The number of CPU cores to allocate to the container.')
+param cpuCores int = 1
+
+@description('The amount of memory to allocate to the container in gigabytes.')
+param memoryInGb int = 2
+
+@description('The behavior of Azure runtime if container has stopped.')
+@allowed([
+  'Always'
+  'Never'
+  'OnFailure'
+])
+param restartPolicy string = 'Always'
+
+resource containerGroup 'Microsoft.ContainerInstance/containerGroups@2023-05-01' = {
+  name: name
+  location: location
+  properties: {
+    containers: [
+      {
+        name: name
+        properties: {
+          image: image
+          ports: [
+            {
+              port: port
+              protocol: 'TCP'
+            }
+          ]
+          resources: {
+            requests: {
+              cpu: cpuCores
+              memoryInGB: memoryInGb
+            }
+          }
+        }
+      }
+    ]
+    osType: 'Linux'
+    restartPolicy: restartPolicy
+    ipAddress: {
+      type: 'Public'
+      ports: [
+        {
+          port: port
+          protocol: 'TCP'
+        }
+      ]
+    }
+  }
+}
+
+output name string = containerGroup.name
+output resourceGroupName string = resourceGroup().name
+output resourceId string = containerGroup.id
+output containerIPv4Address string = containerGroup.properties.ipAddress.ip
+output location string = location
+The following resource is defined in the Bicep file:
+
+Microsoft.ContainerInstance/containerGroups: create an Azure container group. This Bicep file defines a group consisting of a single container instance.
+More Azure Container Instances template samples can be found in the quickstart template gallery.
+
+Deploy the Bicep file
+Save the Bicep file as main.bicep to your local computer.
+
+Deploy the Bicep file using either Azure CLI or Azure PowerShell.
+
+CLI
+PowerShell
+Azure CLI
+
+Copy
+az group create --name exampleRG --location eastus
+az deployment group create --resource-group exampleRG --template-file main.bicep
+When the deployment finishes, you should see a message indicating the deployment succeeded.
+
+Review deployed resources
+Use the Azure portal, Azure CLI, or Azure PowerShell to list the deployed resources in the resource group.
+
+CLI
+PowerShell
+Azure CLI
+
+Copy
+
+Open Cloud Shell
+az resource list --resource-group exampleRG
+View container logs
+Viewing the logs for a container instance is helpful when troubleshooting issues with your container or the application it runs. Use the Azure portal, Azure CLI, or Azure PowerShell to view the container's logs.
+
+CLI
+PowerShell
+Azure CLI
+
+Copy
+
+Open Cloud Shell
+az container logs --resource-group exampleRG --name acilinuxpublicipcontainergroup
+ Note
+
+It may take a few minutes for the HTTP GET request to generate.
+
+Clean up resources
+When no longer needed, use the Azure portal, Azure CLI, or Azure PowerShell to delete the container and all of the resources in the resource group.
+
+CLI
+PowerShell
+Azure CLI
+
+Copy
+
+Open Cloud Shell
+az group delete --name exampleRG
+Next steps
+In this quickstart, you created an Azure container instance using Bicep. If you'd like to build a container image and deploy it from a private Azure container registry, continue to the Azure Container Instances tutorial.
+
+
+Feedback
+Was this page helpful?
+
+Provide product feedback |
+Get help at Microsoft Q&A
+Additional resources
+Training
+
+Module
+
+Run container images in Azure Container Instances - Training
+
+Run container images in Azure Container Instances
+
+Certification
+
+Microsoft Certified: Azure Developer Associate - Certifications
+
+Build end-to-end solutions in Microsoft Azure to create Azure Functions, implement and manage web apps, develop solutions utilizing Azure storage, and more.
+
+Documentation
+
+Per-site configuration by policy
+
+Per-site configuration by policy
+
+Microsoft Edge Browser Policy Documentation
+
+Windows and Mac documentation for all policies supported by the Microsoft Edge Browser
+
+Microsoft Edge Update Policy Documentation
+
+Documentation for all policies supported by the Microsoft Edge Updater
+
+Show 4 more
+Manage cookies
+Previous Versions
+Blog
+Contribute
+Privacy
+Terms of Use
+Trademarks
+© Microsoft 2025"
 
 

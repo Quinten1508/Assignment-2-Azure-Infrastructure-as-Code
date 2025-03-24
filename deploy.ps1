@@ -1,58 +1,85 @@
-# Deployment script for Flask CRUD application to Azure
-# Quinten De Meyer (QDM)
+# Azure Infrastructure-as-Code Deployment Script
+# Preconfigured with QDM initials - Automatic authentication
 
-# Parameters
-$resourceGroupName = "qdm-flask-crud-rg"
-$location = "westeurope"
-$templateFile = "main.bicep"
-$containerImageName = "flask-crud"
-$containerImageTag = "latest"
+# Set fixed values
+$InitialsPrefix = "QDM"
+$InitialsPrefixLower = $InitialsPrefix.ToLower() # Lowercase version for container names
+$ResourceGroupName = "rg-$InitialsPrefix-flask-crud"
+$Location = "westeurope"
+$acrName = "acr${InitialsPrefix}crud".ToLower() # Force lowercase for ACR name
 
-# Step 1: Ensure Az module is installed
-if (-not (Get-Module -ListAvailable -Name Az)) {
-    Write-Host "Az module not found. Installing..."
-    Install-Module -Name Az -Scope CurrentUser -Repository PSGallery -Force
+# Check if already logged in, if not try to use default credentials
+Write-Host "Checking Azure authentication status..." -ForegroundColor Cyan
+$loginStatus = az account show 2>&1
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "Not logged in, attempting automatic login..." -ForegroundColor Yellow
+    az login --use-device-code
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "Automatic login failed. Please run 'az login' manually before running this script." -ForegroundColor Red
+        exit 1
+    }
 }
 
-# Step 2: Login to Azure
-Connect-AzAccount
+# Use the first subscription by default (or current if already selected)
+$subscriptionInfo = az account show | ConvertFrom-Json
+Write-Host "Using subscription: $($subscriptionInfo.name) ($($subscriptionInfo.id))" -ForegroundColor Green
 
-# Step 3: Create resource group
-Write-Host "Creating resource group $resourceGroupName..."
-New-AzResourceGroup -Name $resourceGroupName -Location $location -Force
+# Create resource group
+Write-Host "Creating resource group: $ResourceGroupName in $Location" -ForegroundColor Cyan
+az group create --name $ResourceGroupName --location $Location
 
-# Step 4: Build the Docker image
-Write-Host "Building Docker image..."
-docker build -t $containerImageName`:$containerImageTag .
+# Create ACR
+Write-Host "Creating Azure Container Registry..." -ForegroundColor Cyan
+az acr create --resource-group $ResourceGroupName --name $acrName --sku Basic --admin-enabled true
 
-# Step 5: Deploy Azure resources using Bicep
-Write-Host "Deploying Azure resources..."
-$deployment = New-AzResourceGroupDeployment -ResourceGroupName $resourceGroupName `
-    -TemplateFile $templateFile `
-    -namePrefix "qdm" `
-    -imageName $containerImageName `
-    -imageTag $containerImageTag
+# Get ACR credentials
+$acrPassword = $(az acr credential show --name $acrName --query "passwords[0].value" -o tsv)
+$acrLoginServer = $(az acr show --name $acrName --query loginServer -o tsv)
 
-# Get ACR details
-$acrLoginServer = $deployment.Outputs.acrLoginServer.Value
+# Build and push the container image
+Write-Host "Building Docker image for Flask CRUD app..." -ForegroundColor Cyan
+docker build -t $acrLoginServer/flask-crud-app:latest .
 
-# Step 6: Login to ACR
-Write-Host "Logging in to ACR..."
-$acrName = ($acrLoginServer -split '\.')[0]
-$acrCredentials = Get-AzContainerRegistryCredential -ResourceGroupName $resourceGroupName -Name $acrName
-$acrUsername = $acrCredentials.Username
-$acrPassword = $acrCredentials.Password | ConvertTo-SecureString -AsPlainText -Force
-$cred = New-Object System.Management.Automation.PSCredential($acrUsername, $acrPassword)
+Write-Host "Logging in to Azure Container Registry..." -ForegroundColor Cyan
+az acr login --name $acrName
 
-docker login $acrLoginServer -u $acrUsername -p $acrPassword
+Write-Host "Pushing the container image to ACR..." -ForegroundColor Cyan
+docker push $acrLoginServer/flask-crud-app:latest
 
-# Step 7: Tag and push the image to ACR
-Write-Host "Tagging and pushing image to ACR..."
-docker tag $containerImageName`:$containerImageTag $acrLoginServer/$containerImageName`:$containerImageTag
-docker push $acrLoginServer/$containerImageName`:$containerImageTag
+# Create container instance with public IP (no VNet integration)
+Write-Host "Creating container instance..." -ForegroundColor Cyan
+$containerGroupName = "aci-$InitialsPrefixLower-flask-crud"
 
-# Step 8: Display container IP address
-Write-Host "Deployment completed successfully!"
-Write-Host "Container IP Address: $($deployment.Outputs.containerIPAddress.Value)"
-Write-Host "Application will be available at: http://$($deployment.Outputs.containerIPAddress.Value)"
-Write-Host "Note: It may take a few minutes for the container to start and the application to be accessible." 
+# Fix for PowerShell multiline command
+$containerCreateCmd = "az container create " + `
+  "--resource-group $ResourceGroupName " + `
+  "--name $containerGroupName " + `
+  "--image $acrLoginServer/flask-crud-app:latest " + `
+  "--registry-login-server $acrLoginServer " + `
+  "--registry-username $acrName " + `
+  "--registry-password $acrPassword " + `
+  "--ports 80 " + `
+  "--dns-name-label ""flask-crud-$InitialsPrefixLower"" " + `
+  "--environment-variables FLASK_APP=crudapp.py PYTHONUNBUFFERED=1 " + `
+  "--restart-policy OnFailure " + `
+  "--cpu 1 " + `
+  "--memory 1 " + `
+  "--os-type Linux"
+  
+Invoke-Expression $containerCreateCmd
+
+# Get container IP
+$containerIP = $(az container show --resource-group $ResourceGroupName --name $containerGroupName --query ipAddress.ip -o tsv)
+$containerFQDN = $(az container show --resource-group $ResourceGroupName --name $containerGroupName --query ipAddress.fqdn -o tsv)
+
+# Output information
+Write-Host "`nDeployment complete!" -ForegroundColor Green
+Write-Host "Your Flask CRUD application is available at: http://$containerFQDN" -ForegroundColor Green
+if ($containerIP) {
+  Write-Host "Direct IP access: http://$containerIP" -ForegroundColor Green
+}
+Write-Host "`nTo view container logs, run:" -ForegroundColor Green
+Write-Host "az container logs --resource-group $ResourceGroupName --name $containerGroupName" -ForegroundColor Yellow
+
+Write-Host "`nRemember to delete all resources after showing your assignment to save Azure credits!" -ForegroundColor Yellow
+Write-Host "Run: az group delete --name $ResourceGroupName --yes --no-wait" -ForegroundColor Yellow 
