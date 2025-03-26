@@ -50,7 +50,16 @@ resource containerGroup 'Microsoft.ContainerInstance/containerGroups@2023-05-01'
               memoryInGB: memoryInGb
             }
           }
-          environmentVariables: []
+          environmentVariables: [
+            {
+              name: 'FLASK_APP'
+              value: 'crudapp.py'
+            }
+            {
+              name: 'PYTHONUNBUFFERED'
+              value: '1'
+            }
+          ]
         }
       }
     ]
@@ -64,12 +73,8 @@ resource containerGroup 'Microsoft.ContainerInstance/containerGroups@2023-05-01'
           protocol: 'TCP'
         }
       ]
+      dnsNameLabel: toLower('flask-${aciName}')
     }
-    subnetIds: [
-      {
-        id: subnetId
-      }
-    ]
     imageRegistryCredentials: [
       {
         server: acrLoginServer
