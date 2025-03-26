@@ -1,114 +1,124 @@
 # Assignment 2: Azure Infrastructure-as-Code
 
-This project deploys a Flask CRUD application to Azure using Infrastructure-as-Code techniques. The deployment can be done either using PowerShell scripts or Bicep templates.
+## Introduction and Context
 
-## Project Overview
+This project demonstrates the deployment of a Flask CRUD application to Azure using Infrastructure-as-Code (IaC) techniques with Bicep templates. The goal is to leverage IaC to create reproducible, version-controlled cloud infrastructure that follows Azure best practices.
 
-This project demonstrates how to:
-1. Build a containerized Flask CRUD application
-2. Push the container to Azure Container Registry
-3. Deploy the container to Azure Container Instances
-4. Configure best practices for Azure deployments
+The application is a simple Flask-based CRUD (Create, Read, Update, Delete) web application that allows users to manage database records through a web interface. By containerizing this application and deploying it to Azure Container Instances, we demonstrate cloud-native deployment techniques with security and monitoring best practices.
 
-## Project Structure
+## Architecture Diagram
 
-```
-.
-├── deploy.ps1                 # PowerShell deployment script
-├── Dockerfile                 # Container definition for Flask app
-├── example-flask-crud/        # Source code for the Flask CRUD application
-├── main.bicep                 # Main Bicep deployment template
-├── main.parameters.json       # Parameters for Bicep deployment
-└── modules/                   # Bicep modules for modular deployment
-    ├── acr.bicep              # Azure Container Registry module
-    ├── container-instance.bicep # Azure Container Instance module
-    ├── log-analytics.bicep    # Log Analytics workspace module
-    └── network.bicep          # VNet and subnet module with NSG
-```
+![Azure Architecture Diagram]
+*Note: Create an Azure architecture diagram using diagrams.net with the Azure Icon set and place it in the repository before submission.*
 
-## Quick Start - PowerShell Script
+## Implementation Overview
 
-The simplest way to deploy is using the PowerShell script:
+This solution implements:
 
-```powershell
-./deploy.ps1
+1. **Containerized Application**: Flask CRUD app packaged in a Docker container
+2. **Private Container Registry**: Azure Container Registry (ACR) to store container images
+3. **Containerized Deployment**: Azure Container Instance (ACI) to run the application
+4. **Network Isolation**: Dedicated Virtual Network with NSG security rules
+5. **Monitoring**: Log Analytics integration for centralized logging and monitoring
+
+## Deployment Steps
+
+### Step 1: Build the Container Image
+
+The Flask CRUD application is containerized using Docker:
+```bash
+# Build the container image locally
+docker build -t flask-crud-app:latest .
 ```
 
-The script will:
-1. Automatically check if you're logged in to Azure and handle authentication
-2. Build the Docker container for the Flask CRUD app
-3. Create an Azure Container Registry and push the image
-4. Deploy the container to Azure Container Instances
-5. Output the URL where you can access your application
+### Step 2: Create Azure Container Registry
 
-## Bicep Deployment (Alternative)
-
-For a more granular and modular approach, you can use Bicep:
-
-```powershell
-# Deploy using Bicep templates
+The ACR is provisioned using Bicep templates to store the container image securely:
+```bash
+# Deploy ACR using Bicep
 az deployment group create --resource-group rg-QDM-flask-crud --template-file main.bicep
 ```
 
-The Bicep deployment creates:
-- Virtual Network with a dedicated subnet for container instances
-- Network Security Group with appropriate rules
-- Azure Container Registry with token-based authentication
-- Log Analytics workspace for monitoring
-- Azure Container Instance with VNet integration
+The ACR implementation includes:
+- Basic SKU to minimize costs while providing essential functionality
+- Admin access for authentication
+- Token-based access with minimal permissions following the principle of least privilege
 
-## Resources Created
+### Step 3: Push the Image to ACR
 
-Resources are created with the prefix "QDM" (configurable):
+```bash
+# Authenticate with ACR
+az acr login --name acrQDMcrud
 
-- Resource Group: `rg-QDM-flask-crud`
-- Container Registry: `acrqdmcrud`
-- Container Instance: `aci-qdm-flask-crud`
-- Virtual Network (Bicep only): `vnet-QDM-crud`
-- Subnet (Bicep only): `subnet-QDM-container`
-- Network Security Group (Bicep only): `subnet-QDM-container-nsg`
+# Tag and push the image
+docker tag flask-crud-app:latest acrQDMcrud.azurecr.io/flask-crud-app:latest
+docker push acrQDMcrud.azurecr.io/flask-crud-app:latest
+```
 
-## Application Access
+### Step 4: Deploy to Azure Container Instance
 
-After deployment, the application will be available at:
-- PowerShell deployment: http://flask-crud-qdm.westeurope.azurecontainer.io
-- Bicep deployment: See the outputs of the deployment for the exact URL
+The container is deployed to ACI with VNet integration using Bicep templates:
+```bash
+# Deploy ACI using Bicep
+az deployment group create --resource-group rg-QDM-flask-crud --template-file main.bicep
+```
 
-## Docker Configuration
+### Step 5: Best Practices Implementation
 
-The current Dockerfile uses:
-- Base image: `mcr.microsoft.com/azure-functions/python:4-python3.9`
-- Flask's built-in development server (for simplicity)
-- Database initialization at container start
+The deployment includes several best practices:
+
+1. **Network Security**:
+   - Dedicated VNet and subnet for container isolation
+   - NSG rules limiting inbound traffic to HTTP port 80 only
+   - Explicit outbound rules for Azure Monitor and ACR only
+
+2. **Monitoring**:
+   - Log Analytics workspace integration
+   - Container logs forwarded to Azure Monitor
+   - Custom dashboard for application monitoring
+
+3. **Resource Optimization**:
+   - Right-sized compute resources (1 CPU, 2GB memory)
+   - Basic SKU selection to minimize costs
+
+## Resource Details
+
+All resources are created with the "QDM" prefix for identification:
+
+- **Resource Group**: `rg-QDM-flask-crud`
+- **Container Registry**: `acrQDMcrud` (Basic SKU)
+- **Container Instance**: `aci-QDM-flask-crud` (1 CPU, 2GB memory)
+- **Virtual Network**: `vnet-QDM-crud` (10.0.0.0/16)
+- **Subnet**: `subnet-QDM-aci` (10.0.1.0/24)
+- **NSG**: `subnet-QDM-aci-nsg`
+- **Log Analytics**: `la-QDM-crud`
+
+## Accessing the Application
+
+After deployment, the application can be accessed at:
+```
+http://<container-ip-address>
+```
+
+The exact IP address is available in the deployment outputs.
 
 ## Monitoring and Logs
 
-To view the container logs:
+To view container logs in Azure Monitor:
+1. Navigate to the Azure Portal
+2. Go to the Log Analytics workspace `la-QDM-crud`
+3. Select "Logs" and query container insights
 
-```powershell
-az container logs --resource-group rg-QDM-flask-crud --name aci-qdm-flask-crud
+## Cleanup Instructions
+
+To avoid unnecessary Azure costs, delete all resources after demonstration:
+
+```bash
+az group delete --name rg-QDM-flask-crud --yes
 ```
 
-## Best Practices Implemented
+## Additional Information
 
-1. **Security**:
-   - Container runs in a dedicated VNet (Bicep deployment)
-   - Network Security Group restricts inbound traffic to port 80
-   - Uses Microsoft's official Azure container image
-
-2. **Performance & Cost Optimization**:
-   - Minimal compute resources (1 CPU core, 1GB memory)
-   - Container registry uses Basic SKU to minimize costs
-
-3. **Infrastructure as Code**:
-   - Complete automation for repeatable deployments
-   - Modular Bicep templates for maintainability
-   - PowerShell script for simplified deployment
-
-## Cleanup
-
-After demonstrating your assignment, delete all resources to save Azure credits:
-
-```powershell
-az group delete --name rg-QDM-flask-crud --yes --no-wait
-``` 
+- The complete Infrastructure-as-Code is available in this repository
+- All code is thoroughly commented for educational purposes
+- The deployment is fully automated using either the PowerShell script or Bicep templates 
