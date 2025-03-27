@@ -2,10 +2,13 @@ FROM mcr.microsoft.com/azure-functions/python:4-python3.9
 
 WORKDIR /app
 
-COPY example-flask-crud/ .
+# Copy from local directory rather than assuming a specific folder structure
+COPY . /app/
 
-RUN pip install --no-cache-dir -r requirements.txt
+# Install dependencies - use requirements.txt from the Flask app
+RUN if [ -f requirements.txt ]; then pip install --no-cache-dir -r requirements.txt; fi
 
+# Create startup script
 RUN echo '#!/bin/bash' > /app/start.sh && \
     echo 'cd /app' >> /app/start.sh && \
     echo 'python -c "from app import db; db.create_all()"' >> /app/start.sh && \
