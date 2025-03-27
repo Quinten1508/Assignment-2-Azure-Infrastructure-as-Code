@@ -1,124 +1,100 @@
-# Assignment 2: Azure Infrastructure-as-Code
+# Azure Flask CRUD Application Deployment
 
-## Introduction and Context
+This repository contains Infrastructure-as-Code (IaC) for deploying a containerized Flask CRUD application to Azure using Bicep templates and PowerShell automation.
 
-This project demonstrates the deployment of a Flask CRUD application to Azure using Infrastructure-as-Code (IaC) techniques with Bicep templates. The goal is to leverage IaC to create reproducible, version-controlled cloud infrastructure that follows Azure best practices.
+## Deployment Architecture
 
-The application is a simple Flask-based CRUD (Create, Read, Update, Delete) web application that allows users to manage database records through a web interface. By containerizing this application and deploying it to Azure Container Instances, we demonstrate cloud-native deployment techniques with security and monitoring best practices.
+![Architecture Diagram](architecture-diagram.png)
 
-## Architecture Diagram
+*Note: Add an architecture diagram using diagrams.net with Azure icons before submission.*
 
-![Azure Architecture Diagram]
-*Note: Create an Azure architecture diagram using diagrams.net with the Azure Icon set and place it in the repository before submission.*
+## What the Deployment Script Does
 
-## Implementation Overview
+The `deploy.ps1` script automates the entire deployment process with zero user interaction required. Here's what it does:
 
-This solution implements:
+### 1. Initial Setup and Authentication
+- Sets resource naming conventions with personalized prefix (`QDM`)
+- Implements silent authentication using service principal, environment variables, or managed identity
+- Creates a resource group in West Europe
 
-1. **Containerized Application**: Flask CRUD app packaged in a Docker container
-2. **Private Container Registry**: Azure Container Registry (ACR) to store container images
-3. **Containerized Deployment**: Azure Container Instance (ACI) to run the application
-4. **Network Isolation**: Dedicated Virtual Network with NSG security rules
-5. **Monitoring**: Log Analytics integration for centralized logging and monitoring
+### 2. Application Preparation
+- Checks for the Flask CRUD application locally
+- Clones the application from GitHub if not present
+- Verifies Docker availability for local container builds
 
-## Deployment Steps
+### 3. Infrastructure Deployment
+- **Azure Container Registry (ACR)**
+  - Creates a private container registry for image storage
+  - Configures least-privilege access tokens
 
-### Step 1: Build the Container Image
+- **Networking Configuration**
+  - Establishes a dedicated virtual network (`10.0.0.0/16`)
+  - Creates a subnet (`10.0.0.0/24`) with Container Instance delegation
+  - Implements network security groups allowing only HTTP traffic (port 80)
 
-The Flask CRUD application is containerized using Docker:
-```bash
-# Build the container image locally
-docker build -t flask-crud-app:latest .
+- **Monitoring Setup**
+  - Creates a Log Analytics workspace
+  - Configures container logging to Azure Monitor
+
+### 4. Container Deployment
+- Builds the Flask application container image
+- Pushes the image to Azure Container Registry
+- Deploys the container to Azure Container Instance with:
+  - Network integration (runs in the dedicated subnet)
+  - Public IP address for access
+  - Log Analytics integration
+  - Proper resource sizing (1 CPU, 2GB memory)
+
+### 5. Best Practices Implementation
+- **Security**
+  - Network isolation through dedicated VNet
+  - Restricted inbound/outbound traffic with NSG rules
+  - Principle of least privilege for all access
+
+- **Monitoring**
+  - Centralized logging with Azure Monitor
+  - Container health metrics
+
+- **Cost Optimization**
+  - Right-sized resources to minimize Azure costs
+  - Basic SKU selection where appropriate
+
+## Running the Deployment
+
+To deploy the application:
+
+```powershell
+# Just run the deployment script
+./deploy.ps1
 ```
 
-### Step 2: Create Azure Container Registry
-
-The ACR is provisioned using Bicep templates to store the container image securely:
-```bash
-# Deploy ACR using Bicep
-az deployment group create --resource-group rg-QDM-flask-crud --template-file main.bicep
-```
-
-The ACR implementation includes:
-- Basic SKU to minimize costs while providing essential functionality
-- Admin access for authentication
-- Token-based access with minimal permissions following the principle of least privilege
-
-### Step 3: Push the Image to ACR
-
-```bash
-# Authenticate with ACR
-az acr login --name acrQDMcrud
-
-# Tag and push the image
-docker tag flask-crud-app:latest acrQDMcrud.azurecr.io/flask-crud-app:latest
-docker push acrQDMcrud.azurecr.io/flask-crud-app:latest
-```
-
-### Step 4: Deploy to Azure Container Instance
-
-The container is deployed to ACI with VNet integration using Bicep templates:
-```bash
-# Deploy ACI using Bicep
-az deployment group create --resource-group rg-QDM-flask-crud --template-file main.bicep
-```
-
-### Step 5: Best Practices Implementation
-
-The deployment includes several best practices:
-
-1. **Network Security**:
-   - Dedicated VNet and subnet for container isolation
-   - NSG rules limiting inbound traffic to HTTP port 80 only
-   - Explicit outbound rules for Azure Monitor and ACR only
-
-2. **Monitoring**:
-   - Log Analytics workspace integration
-   - Container logs forwarded to Azure Monitor
-   - Custom dashboard for application monitoring
-
-3. **Resource Optimization**:
-   - Right-sized compute resources (1 CPU, 2GB memory)
-   - Basic SKU selection to minimize costs
-
-## Resource Details
-
-All resources are created with the "QDM" prefix for identification:
-
-- **Resource Group**: `rg-QDM-flask-crud`
-- **Container Registry**: `acrQDMcrud` (Basic SKU)
-- **Container Instance**: `aci-QDM-flask-crud` (1 CPU, 2GB memory)
-- **Virtual Network**: `vnet-QDM-crud` (10.0.0.0/16)
-- **Subnet**: `subnet-QDM-aci` (10.0.1.0/24)
-- **NSG**: `subnet-QDM-aci-nsg`
-- **Log Analytics**: `la-QDM-crud`
+The script handles everything automatically, including:
+- Authentication
+- Resource provisioning
+- Container building and pushing
+- Container instance deployment
 
 ## Accessing the Application
 
-After deployment, the application can be accessed at:
-```
-http://<container-ip-address>
-```
+After deployment completes, the script outputs:
+- The container's public IP address
+- Log Analytics workspace URL for monitoring
 
-The exact IP address is available in the deployment outputs.
+Access the application at: `http://<container-ip-address>`
 
-## Monitoring and Logs
+## Resource Cleanup
 
-To view container logs in Azure Monitor:
-1. Navigate to the Azure Portal
-2. Go to the Log Analytics workspace `la-QDM-crud`
-3. Select "Logs" and query container insights
+To avoid unnecessary Azure costs, run:
 
-## Cleanup Instructions
-
-To avoid unnecessary Azure costs, delete all resources after demonstration:
-
-```bash
+```powershell
 az group delete --name rg-QDM-flask-crud --yes
 ```
 
-## Additional Information
+## Technical Components
 
-- The complete Infrastructure-as-Code is available in this repository
-- All code is thoroughly commented for educational purposes
-- The deployment is fully automated using either the PowerShell script or Bicep templates 
+The deployment uses modular Bicep templates:
+- `main.bicep`: Orchestrates the deployment workflow
+- `modules/acr.bicep`: Container registry setup
+- `modules/network.bicep`: VNet, subnet and NSG configuration
+- `modules/log-analytics.bicep`: Monitoring setup
+- `modules/container-instance.bicep`: Container deployment with VNet integration 
