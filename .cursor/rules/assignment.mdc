@@ -8,11 +8,18 @@ description:
 globs: 
 alwaysApply: true
 ---
+---
+description: 
+globs: 
+alwaysApply: true
+---
 
 # Your rule content
 
 - You can @ files here
 - You can use markdown but dont have to
+
+ALWAYS Generate powershell commands
 
 FOLLOW THIS ASSIGNMENT AT ALL TIMES USE BEST PRACTICES FOR BEST SCORE
 
