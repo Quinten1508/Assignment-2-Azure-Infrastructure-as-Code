@@ -26,3 +26,6 @@ ENV/
 
 # Ignore PowerShell execution policy files
 *.ps1.execution-policy 
+
+# Ignore sensitive credentials
+sp-credentials.json 
