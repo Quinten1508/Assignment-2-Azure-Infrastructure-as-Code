@@ -351,33 +351,59 @@ I implemented comprehensive monitoring:
 
 ## Requirements Fulfillment
 
-### 1. ACR with Bicep
-I successfully created an Azure Container Registry with the following features:
-- Standard SKU for cost efficiency
-- Geo-replication disabled to save Azure credits
-- Admin account disabled for improved security
-- Implemented token-based authentication with least privilege
+I have successfully fulfilled all requirements of the Assignment 2: Azure Infrastructure-as-Code as outlined below:
 
-### 2. ACI Deployment with Bicep
-The container deployment includes:
-- Resource constraints (1 CPU, 1GB RAM) for cost efficiency
-- Health probes to ensure application availability
-- Container restart policy set to Always for reliability
-- Image registry credentials configured for private ACR
+### Step 1: Learn about Infrastructure-as-Code and Bicep templates
+- Completed the MS Learn tutorials on IaC and Bicep
+- Applied the learned concepts throughout the implementation
+- Used Bicep as the primary IaC language for all deployments
 
-### 3. Network Configuration
-I implemented the network requirements by:
-- Creating a custom VNet/subnet for the container instance
-- Configuring proper NSG rules to restrict traffic
-- Setting up Application Gateway with a public IP
-- Only allowing required traffic in/out of the container
+### Step 2: Build the container image
+- Created a Docker container based on the example-flask-crud application
+- Built and tested the containerized application locally
+- Optimized the container image size and configuration for Azure deployment
 
-### 4. Logging and Monitoring
-For observability, I:
-- Configured container logs to stream to Azure Monitor
-- Created Log Analytics workspace for centralized logging
-- Set up diagnostic settings on all key resources
-- Implemented query-based alerting for critical conditions
+### Step 3: Create Azure Container Registry (ACR)
+- Implemented an ACR using Bicep templates with appropriate SKU for cost efficiency
+- Created ACR token with least privilege access to the registry
+- Set up secure image push/pull workflows in the deployment scripts
+
+### Step 4: Deploy the container to Azure Container Instance
+- Deployed the container to ACI using modular Bicep templates
+- Configured proper resource allocation (1 CPU, 1GB RAM) to save Azure credits
+- Implemented health probes and restart policies for reliability
+
+### Step 5: Implement best practices
+- **VNet/Subnet**: Created a dedicated VNet and subnet for the container instance
+- **Public IP**: Configured Application Gateway with a public IP for application access
+- **HTTP on port 80**: Set up the container to serve HTTP traffic on port 80
+- **Traffic Control**: Implemented NSG rules to allow only required traffic
+- **Monitoring**: Configured container logs to stream to Azure Monitor
+
+### Extra Features
+I went beyond the basic requirements to implement additional security and usability features:
+
+1. **SSL/HTTPS Support**:
+   - Implemented HTTPS using Let's Encrypt certificates
+   - Configured SSL termination at the Application Gateway
+   - Created automated SSL certificate deployment scripts
+
+2. **Custom Domain**:
+   - Set up a custom domain "iac.quinten-de-meyer.be" for the application
+   - Configured DNS records and domain validation
+   - Integrated domain with SSL certificate for secure access
+
+3. **Enhanced Security**:
+   - Implemented proper network isolation with private subnets
+   - Set up Service Principal with least privilege access
+   - Created comprehensive security rules to protect all resources
+
+4. **Advanced Monitoring**:
+   - Implemented query-based alerting for critical conditions
+   - Created dashboard visualizations for resource utilization
+   - Set up diagnostic settings on all key Azure resources
+
+All resources were named following the required convention with my initials, and I ensured optimization of resource consumption to save Azure credits.
 
 ## Conclusion
 Through this assignment, I demonstrated my understanding of Infrastructure as Code using Bicep templates to deploy a containerized application to Azure. I implemented security best practices, optimized resource usage, and ensured proper monitoring capabilities.
