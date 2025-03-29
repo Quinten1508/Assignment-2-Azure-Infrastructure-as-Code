@@ -49,6 +49,147 @@ This Dockerfile:
 - Exposes port 80 for HTTP traffic
 - Configures necessary environment variables for Flask
 
+### Azure Container Registry Implementation
+For Step 3 of the assignment, I created an Azure Container Registry using Bicep templates and implemented a token with least privilege access. The implementation consists of two Bicep modules:
+
+#### ACR Bicep Module (acr.bicep)
+```bicep
+// Azure Container Registry Module
+@description('Azure region for the ACR')
+param location string
+
+@description('Name of the Azure Container Registry')
+param acrName string
+
+@description('SKU of the Azure Container Registry')
+param acrSku string = 'Basic'
+
+// Create Azure Container Registry
+resource acr 'Microsoft.ContainerRegistry/registries@2021-09-01' = {
+  name: acrName
+  location: location
+  sku: {
+    name: acrSku
+  }
+  properties: {
+    adminUserEnabled: true
+  }
+}
+
+// Outputs
+output acrId string = acr.id
+output acrLoginServer string = acr.properties.loginServer
+output acrName string = acr.name 
+```
+
+#### ACR Token Bicep Module (acr-token.bicep)
+```bicep
+// ACR Token Module
+@description('Name of the Azure Container Registry')
+param acrName string
+
+@description('Name of the token')
+param tokenName string = 'acrpull-token'
+
+@description('Name of the scope map')
+param scopeMapName string = 'pull-scope-map'
+
+// Create a scope map for pull access only
+resource pullScopeMap 'Microsoft.ContainerRegistry/registries/scopeMaps@2023-07-01' = {
+  name: '${acrName}/${scopeMapName}'
+  properties: {
+    actions: [
+      'repositories/flask-crud/content/read'
+    ]
+    description: 'Pull access for flask-crud repository'
+  }
+}
+
+// Create a token with the scope map
+resource acrToken 'Microsoft.ContainerRegistry/registries/tokens@2023-07-01' = {
+  name: '${acrName}/${tokenName}'
+  properties: {
+    scopeMapId: pullScopeMap.id
+    status: 'enabled'
+  }
+  dependsOn: [
+    pullScopeMap
+  ]
+}
+```
+
+#### Integration in Main Bicep Template
+The ACR modules are referenced in the main Bicep template:
+
+```bicep
+// Azure Container Registry
+module acrModule 'modules/acr.bicep' = {
+  name: 'acrDeployment'
+  params: {
+    location: location
+    acrName: acrName
+  }
+}
+
+// ACR Token with pull permissions
+module acrTokenModule 'modules/acr-token.bicep' = {
+  name: 'acrTokenDeployment'
+  params: {
+    acrName: acrName
+    tokenName: acrTokenName
+  }
+  dependsOn: [
+    acrModule
+  ]
+}
+```
+
+#### PowerShell Deployment Automation
+The deployment script includes functions to create the ACR and push the container image:
+
+```powershell
+# Build and push the container image
+function New-ContainerImage {
+    # ACR name must be lowercase and globally unique
+    $acrName = "acr$($InitialsPrefix.ToLower())crud$AcrSuffix"
+    
+    # Deploy ACR using Bicep
+    az deployment group create `
+        --resource-group $ResourceGroupName `
+        --template-file bicep/modules/acr.bicep `
+        --parameters acrName=$acrName location=$Location
+    
+    # Login to ACR
+    az acr login --name $acrName
+    
+    # Build and tag the Docker image
+    docker build -t $fullImageName .
+    
+    # Push the image to ACR
+    docker push $fullImageName
+}
+
+# Create an ACR token with least privilege access
+function New-ACRToken {
+    # Create a scope map for pull access only
+    az acr scope-map create `
+        --name pull-scope-map `
+        --registry $acrName `
+        --repository flask-crud content/read
+    
+    # Create a token with the scope map
+    az acr token create `
+        --name $tokenName `
+        --registry $acrName `
+        --scope-map pull-scope-map
+}
+```
+
+This implementation satisfies Step 3 of the assignment by:
+1. Creating an ACR using Bicep templates
+2. Creating a token with least privilege access (read-only for the specific repository)
+3. Automating the image build and push process in PowerShell
+
 ### Deployment Automation
 I created a two-step deployment process:
 
