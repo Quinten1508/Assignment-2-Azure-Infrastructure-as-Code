@@ -422,6 +422,8 @@ For security, I implemented:
    - Configured SSL termination at the Application Gateway
    - Implemented proper certificate management and renewal (documented in ssl_guide.md)
 
+For detailed information on the security implementation and best practices, see [security.md](./security.md).
+
 ### SSL/HTTPS Implementation
 I added HTTPS support to the application with the following features:
 
