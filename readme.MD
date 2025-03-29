@@ -21,7 +21,7 @@ I used the [example-flask-crud](https://github.com/gurkanakdeniz/example-flask-c
 ### Deployment Automation
 I created a two-step deployment process:
 
-1. **Service Principal Setup** - I developed a `setcredentials.ps1` script to:
+1. **Service Principal Setup** - I developed a `set-credentials.ps1` script to:
    - Create a Service Principal with appropriate roles
    - Store credentials securely in a local file for automated deployments
    - This enabled non-interactive deployments with least-privilege principles
