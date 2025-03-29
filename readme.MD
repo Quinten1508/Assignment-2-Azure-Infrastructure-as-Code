@@ -1,234 +1,104 @@
-# Azure Infrastructure-as-Code: Flask CRUD Application Deployment
+# Assignment 2: Azure Infrastructure-as-Code
 
 ## Introduction
-This project demonstrates how to deploy a Flask CRUD web application to Azure using Infrastructure as Code (IaC) with Bicep templates. The assignment aims to show the implementation of cloud infrastructure automation, focusing on containerization, networking, security, and monitoring in Azure. 
+This repository contains the infrastructure-as-code (IaC) implementation for deploying a Flask CRUD application to Azure using Bicep templates. The assignment focuses on automating the deployment of cloud infrastructure through code, which provides better consistency, repeatability, and version control compared to manual deployments.
 
-By leveraging IaC principles, we can create reproducible, consistent, and version-controlled infrastructure deployments. This approach eliminates manual configuration and ensures that the infrastructure can be consistently reproduced in different environments.
+The solution implements a containerized Flask application running in Azure Container Instances (ACI), with container images stored in Azure Container Registry (ACR). The application is exposed through an Application Gateway to provide secure public access.
 
-## Architecture
+## Architecture Diagram
+![Azure Architecture](./architecture-diagram.png)
 
-![Azure Architecture Diagram](https://i.imgur.com/example.png)
+*Note: Please refer to the architecture diagram file in this repository. The diagram was created using diagrams.net with the Azure Icon set.*
 
-*Note: Replace with your architecture diagram using Azure Icons from diagrams.net*
+## Implementation Steps
 
-## Components
+### Step 1: Create a Container Image
+The application is based on the [example-flask-crud](https://github.com/gurkanakdeniz/example-flask-crud) repository. The Dockerfile in this repo builds the container image for the application.
 
-### Core Resources
-1. **Azure Container Registry (ACR)** - Private registry for storing the Flask CRUD container image
-2. **Azure Container Instance (ACI)** - Serverless container runtime for the Flask application
-3. **Virtual Network & Subnet** - Dedicated network environment with proper isolation
-4. **Network Security Groups (NSGs)** - Traffic filtering for both container and Application Gateway
-5. **Application Gateway** - Layer 7 load balancer providing public access with SSL termination
-6. **Log Analytics Workspace** - Centralized logging for container monitoring
+```bash
+# Build the Docker image
+docker build -t flask-crud:latest .
+```
 
-### Security Features
-1. **Private Network** - Container runs in a private subnet without direct internet access
-2. **NSG Rules** - Only required traffic flows in and out (HTTP/HTTPS)
-3. **SSL Certificate** - HTTPS encryption for secure client communication
-4. **ACR Token** - Least privilege access for container image pulls
+### Step 2: Setup Azure Infrastructure with Bicep
 
-## Prerequisites
-
-- [Azure CLI](https://docs.microsoft.com/en-us/cli/azure/install-azure-cli) (v2.30.0 or higher)
-- [Docker](https://www.docker.com/get-started)
-- [Git](https://git-scm.com/downloads)
-- PowerShell 7.0+ 
-- Azure subscription
-- Domain name for SSL (optional for HTTPS)
-
-## Deployment
-
-### 1. Clone the repository
+#### Resource Group Creation
+First, we create a resource group to contain all our Azure resources:
 
 ```powershell
-git clone https://github.com/yourusername/Assignment-2-Azure-Infrastructure-as-Code.git
-cd Assignment-2-Azure-Infrastructure-as-Code
+az group create --name rg-qdm-flask-crud --location westeurope
 ```
 
-### 2. Update parameters
-
-Edit `bicep/main.parameters.json` to replace placeholders with your initials:
-
-```json
-{
-    "parameters": {
-        "initials": {
-            "value": "YOUR"  # Replace with your initials
-        }
-    }
-}
-```
-
-### 3. Deploy the infrastructure
-
-Run the deployment script with your initials and preferred region:
+#### Deploy Bicep Template
+The main.bicep file deploys the following resources:
+- Azure Container Registry (ACR)
+- Virtual Network and Subnet for the ACI
+- Network Security Groups with appropriate rules
+- Azure Container Instance with the Flask application
+- Application Gateway for public access
+- Log Analytics workspace for monitoring
 
 ```powershell
-.\deploy.ps1 -InitialsPrefix "YOUR" -Location "westeurope"
+az deployment group create --resource-group rg-qdm-flask-crud --template-file main.bicep
 ```
 
-The script performs the following actions:
-1. Creates a resource group with your initials
-2. Clones the Flask CRUD application repository if not present
-3. Builds and tags the Docker container image
-4. Creates an Azure Container Registry using Bicep
-5. Pushes the container image to your private ACR
-6. Creates an ACR token with minimal pull permissions
-7. Deploys the full infrastructure using Bicep templates:
-   - Virtual Network with subnets for ACI and Application Gateway
-   - Network Security Groups with appropriate rules
-   - Log Analytics workspace for monitoring
-   - Azure Container Instance running in the private subnet
-   - Application Gateway providing public access with health probes
-
-### 4. Configure SSL (Optional)
-
-To enable HTTPS:
-
-1. Set up DNS A record pointing to the Application Gateway public IP
-2. Generate an SSL certificate (using Let's Encrypt or similar)
-3. Install the certificate on Application Gateway:
+### Step 3: Push Image to Azure Container Registry
+After ACR is provisioned, we push our container image:
 
 ```powershell
-# Upload SSL certificate to Application Gateway
-$resourceGroup = "rg-YOUR-flask-crud"
-$appGatewayName = "appgw-YOUR-flask"
+# Login to ACR
+az acr login --name acrqdmcrud01
 
-az network application-gateway ssl-cert create `
-  --resource-group $resourceGroup `
-  --gateway-name $appGatewayName `
-  --name "sslCert" `
-  --cert-file "path/to/certificate.pfx" `
-  --cert-password "your-password"
-
-# Configure HTTPS listener and routing rule
-az network application-gateway frontend-port create `
-  --resource-group $resourceGroup `
-  --gateway-name $appGatewayName `
-  --name "port443" `
-  --port 443
-
-az network application-gateway http-listener create `
-  --resource-group $resourceGroup `
-  --gateway-name $appGatewayName `
-  --name "httpsListener" `
-  --frontend-port "port443" `
-  --ssl-cert "sslCert" `
-  --frontend-ip "appGatewayFrontendIP"
-
-az network application-gateway rule create `
-  --resource-group $resourceGroup `
-  --gateway-name $appGatewayName `
-  --name "httpsRule" `
-  --http-listener "httpsListener" `
-  --rule-type "Basic" `
-  --address-pool "flaskCrudBackendPool" `
-  --http-settings "flaskCrudHttpSettings" `
-  --priority 200
+# Tag and push the image
+docker tag flask-crud:latest acrqdmcrud01.azurecr.io/flask-crud:latest
+docker push acrqdmcrud01.azurecr.io/flask-crud:latest
 ```
-
-### 5. Access the application
-
-After deployment completes, you can access your application:
-- HTTP: http://<app-gateway-public-ip>
-- HTTPS: https://your-domain-name.example.com (if SSL configured)
-
-## Infrastructure Details
-
-### Bicep Structure
-
-```
-bicep/
-  ├── main.bicep                  # Main deployment template
-  ├── main.parameters.json        # Deployment parameters
-  └── modules/
-      ├── acr.bicep               # Azure Container Registry
-      ├── acr-token.bicep         # ACR Token with least privilege
-      ├── aci.bicep               # Azure Container Instance
-      ├── vnet.bicep              # Virtual Network with subnets
-      ├── nsg.bicep               # Container NSG
-      ├── nsg-appgw.bicep         # Application Gateway NSG
-      ├── loganalytics.bicep      # Log Analytics workspace
-      └── appgateway.bicep        # Application Gateway
-```
-
-### Network Security 
-
-The Flask CRUD application is protected with multiple security layers:
-
-1. **Container Subnet NSG**:
-   - Allows HTTP (port 80) from Application Gateway subnet only
-   - Denies all other inbound traffic
-   - Allows outbound traffic for container operation
-
-2. **Application Gateway NSG**:
-   - Allows HTTP (port 80) and HTTPS (port 443) from the internet
-   - Allows health probe traffic
-   - Denies all other inbound traffic
-
-### Container Configuration
-
-The Flask CRUD application runs with optimized settings:
-
-1. **Resource Allocation**:
-   - 1 CPU core
-   - 1GB memory
-
-2. **Health Probes**:
-   - Liveness probe: Ensures container is responsive
-   - Readiness probe: Confirms application is ready to receive traffic
-
-3. **Network Configuration**:
-   - Private IP address (no direct internet exposure)
-   - ACR authentication for image pulling
-
-### Monitoring and Logging
-
-All container logs are sent to Azure Monitor through Log Analytics:
-
-1. **Container Insights**:
-   - Container performance metrics
-   - Application logs
-   - Container health status
-
-2. **Application Gateway Logs**:
-   - Access logs
-   - Performance logs
-   - Firewall logs (if WAF enabled)
 
 ## Best Practices Implemented
 
-1. **Infrastructure as Code**
-   - Modular Bicep templates for reusability
-   - Parameter files for environment-specific values
-   - Idempotent deployments
+### Network Security
+- The container instance runs in a dedicated virtual network
+- Network Security Groups (NSGs) restrict traffic with specific rules
+- Only HTTP traffic on port 80 is allowed to the container
+- Application Gateway handles public access and could be configured for SSL/TLS
 
-2. **Security**
-   - Network segmentation with VNet and subnets
-   - NSG rules following least privilege
-   - HTTPS for encrypted communication
-   - ACR token with minimal permissions
+### Resource Efficiency
+- Container is configured with just 1 CPU core and 1GB of memory
+- Resources are sized appropriately for the application needs
+- Premium tier services are avoided where standard offerings are sufficient
 
-3. **Resource Optimization**
-   - Right-sized container resources
-   - Standard_v2 tier for Application Gateway (cost-effective)
+### Monitoring
+- All container logs are sent to Azure Monitor via Log Analytics workspace
+- Health probes ensure the application is functioning correctly
+- Application insights could be integrated for more detailed monitoring
 
-4. **Monitoring**
-   - Centralized logging with Log Analytics
-   - Health probes for application availability
+### Security
+- Container Registry access is limited with tokens providing least privilege
+- Network isolation prevents direct access to the container
+- Application Gateway can be configured with WAF (Web Application Firewall)
+
+## HTTPS Configuration
+For details on setting up HTTPS with Let's Encrypt certificates on the Application Gateway, please refer to the [SSL Configuration Guide](./ssl_guide.md).
 
 ## Cleanup
-
-After demonstrating your assignment, delete all Azure resources to save credits:
+To avoid unnecessary Azure costs, remember to delete all resources when they are no longer needed:
 
 ```powershell
-az group delete --name rg-YOUR-flask-crud --yes
+az group delete --name rg-qdm-flask-crud --yes
 ```
 
-## References
+## Bicep Template Structure
+- `main.bicep`: Main template file that orchestrates the deployment
+- `acr.bicep`: Module for Azure Container Registry
+- `vnet.bicep`: Module for Virtual Network and Subnet configuration
+- `aci.bicep`: Module for Azure Container Instance
+- `appgw.bicep`: Module for Application Gateway
+- `loganalytics.bicep`: Module for Log Analytics workspace
 
-- [Azure Container Instances Documentation](https://docs.microsoft.com/en-us/azure/container-instances/)
-- [Azure Bicep Documentation](https://docs.microsoft.com/en-us/azure/azure-resource-manager/bicep/)
-- [Flask CRUD Application](https://github.com/gurkanakdeniz/example-flask-crud)
-- [Azure Application Gateway Documentation](https://docs.microsoft.com/en-us/azure/application-gateway/)
-- [Azure Log Analytics Documentation](https://docs.microsoft.com/en-us/azure/azure-monitor/logs/log-analytics-overview) 
+Each module follows best practices for Bicep, including appropriate comments, parameter validation, and output variables.
+
+## Considerations and Limitations
+- For production workloads, consider using Azure Kubernetes Service for better scalability
+- This implementation doesn't include CI/CD pipelines for automated deployments
+- For a more resilient solution, implement multiple instances across availability zones
+- Consider implementing backup and disaster recovery strategies 
