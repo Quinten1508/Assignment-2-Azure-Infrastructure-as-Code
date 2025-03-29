@@ -29,3 +29,29 @@ ENV/
 
 # Ignore sensitive credentials
 sp-credentials.json 
+
+# Ignore sensitive credential files
+*credentials*.json
+*secret*.json
+*.pfx
+*.key
+*.pem
+
+# Environment variables file
+.env
+.env.local
+
+# Local configuration
+local.settings.json
+
+# IDE files
+.idea/
+.vscode/
+*.suo
+*.user
+
+# Build artifacts
+bin/
+obj/
+node_modules/
+dist/ 

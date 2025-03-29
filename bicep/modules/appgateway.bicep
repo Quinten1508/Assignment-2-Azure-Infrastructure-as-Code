@@ -89,7 +89,10 @@ resource appGateway 'Microsoft.Network/applicationGateways@2021-05-01' = {
           protocol: 'Http'
           cookieBasedAffinity: 'Disabled'
           requestTimeout: 30
-          pickHostNameFromBackendAddress: false
+          pickHostNameFromBackendAddress: true
+          probe: {
+            id: resourceId('Microsoft.Network/applicationGateways/probes', appGatewayName, 'flaskCrudHealthProbe')
+          }
         }
       }
     ]
@@ -122,6 +125,25 @@ resource appGateway 'Microsoft.Network/applicationGateways@2021-05-01' = {
             id: resourceId('Microsoft.Network/applicationGateways/backendHttpSettingsCollection', appGatewayName, 'flaskCrudHttpSettings')
           }
           priority: 100
+        }
+      }
+    ]
+    probes: [
+      {
+        name: 'flaskCrudHealthProbe'
+        properties: {
+          protocol: 'Http'
+          path: '/'
+          interval: 30
+          timeout: 30
+          unhealthyThreshold: 3
+          pickHostNameFromBackendHttpSettings: true
+          minServers: 0
+          match: {
+            statusCodes: [
+              '200-399'
+            ]
+          }
         }
       }
     ]

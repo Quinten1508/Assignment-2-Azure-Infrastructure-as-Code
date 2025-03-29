@@ -10,6 +10,9 @@
                                     },
                        "containerImageName":  {
                                                   "value":  "acrqdmcrud01.azurecr.io/flask-crud:latest"
-                                              }
+                                              },
+                       "acrName":  {
+                                       "value":  "acrqdmcrud01"
+                                   }
                    }
 }

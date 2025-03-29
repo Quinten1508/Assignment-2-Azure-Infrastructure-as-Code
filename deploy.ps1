@@ -16,11 +16,39 @@ param (
     [string]$ResourceGroupName = "",
     
     [Parameter(Mandatory = $false)]
-    [string]$AcrSuffix = "01"
+    [string]$AcrSuffix = "01",
+    
+    [Parameter(Mandatory = $false)]
+    [switch]$UseCredentialsFile
 )
 
 # Set error action preference
 $ErrorActionPreference = "Stop"
+
+# Load environment variables from credentials file if requested
+if ($UseCredentialsFile) {
+    $credentialsFile = "./sp-credentials.json"
+    if (Test-Path $credentialsFile) {
+        try {
+            Write-Host "Loading credentials from file..." -ForegroundColor Cyan
+            $credentials = Get-Content -Raw -Path $credentialsFile | ConvertFrom-Json
+            
+            # Set environment variables
+            $env:AZURE_CLIENT_ID = $credentials.clientId
+            $env:AZURE_CLIENT_SECRET = $credentials.clientSecret
+            $env:AZURE_SUBSCRIPTION_ID = $credentials.subscriptionId
+            $env:AZURE_TENANT_ID = $credentials.tenantId
+            
+            Write-Host "Credentials loaded successfully" -ForegroundColor Green
+        } catch {
+            Write-Error "Failed to read credentials file: $_"
+            exit 1
+        }
+    } else {
+        Write-Error "Credentials file not found at $credentialsFile"
+        exit 1
+    }
+}
 
 # Check if parameters file exists and read InitialsPrefix from it
 if (Test-Path $ParametersFile) {
@@ -223,6 +251,16 @@ function New-ACRToken {
     Write-Host "Created ACR token with least privilege access" -ForegroundColor Green
 }
 
+# Check if service principal credentials are available as environment variables
+function Test-ServicePrincipalCredentials {
+    if ([string]::IsNullOrEmpty($env:AZURE_CLIENT_ID) -or
+        [string]::IsNullOrEmpty($env:AZURE_CLIENT_SECRET) -or
+        [string]::IsNullOrEmpty($env:AZURE_TENANT_ID)) {
+        return $false
+    }
+    return $true
+}
+
 # Main execution flow
 Write-Host "Starting Azure Infrastructure-as-Code deployment for Flask CRUD app" -ForegroundColor Green
 Write-Host "Using initials: $InitialsPrefix" -ForegroundColor Green
@@ -246,11 +284,27 @@ catch {
     exit 1
 }
 
-# Check if logged in to Azure
-az account show 2>&1 | Out-Null
-if ($LASTEXITCODE -ne 0) {
-    Write-Host "Not logged in to Azure. Please run 'az login' first." -ForegroundColor Yellow
-    az login
+# Check for authentication method
+$useServicePrincipal = Test-ServicePrincipalCredentials
+if ($useServicePrincipal) {
+    Write-Host "Using service principal authentication with environment variables" -ForegroundColor Cyan
+    # Login with service principal
+    az login --service-principal `
+        --username $env:AZURE_CLIENT_ID `
+        --password $env:AZURE_CLIENT_SECRET `
+        --tenant $env:AZURE_TENANT_ID | Out-Null
+    
+    if ($env:AZURE_SUBSCRIPTION_ID) {
+        az account set --subscription $env:AZURE_SUBSCRIPTION_ID
+    }
+} else {
+    # Check if logged in to Azure using interactive login
+    az account show 2>&1 | Out-Null
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "Not logged in to Azure. Please run 'az login' first or use the -UseCredentialsFile parameter." -ForegroundColor Yellow
+        Write-Host "You can also run '.\set-credentials.ps1' to set up environment variables for service principal authentication." -ForegroundColor Yellow
+        az login
+    }
 }
 
 # Execute deployment steps

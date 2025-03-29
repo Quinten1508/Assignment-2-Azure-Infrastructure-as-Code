@@ -35,6 +35,9 @@ param appGatewayName string = 'appgw-${initials}-flask'
 @description('Container image name')
 param containerImageName string = '${acrName}.azurecr.io/flask-crud:latest'
 
+@description('ACR token name with pull permissions')
+param acrTokenName string = 'acrpull-token'
+
 // Network Security Group for Container Subnet
 module nsgModule 'modules/nsg.bicep' = {
   name: 'nsgDeployment'
@@ -72,6 +75,18 @@ module acrModule 'modules/acr.bicep' = {
     location: location
     acrName: acrName
   }
+}
+
+// ACR Token with pull permissions
+module acrTokenModule 'modules/acr-token.bicep' = {
+  name: 'acrTokenDeployment'
+  params: {
+    acrName: acrName
+    tokenName: acrTokenName
+  }
+  dependsOn: [
+    acrModule
+  ]
 }
 
 // Log Analytics Workspace

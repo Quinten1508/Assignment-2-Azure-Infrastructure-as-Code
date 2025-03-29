@@ -65,6 +65,30 @@ resource containerGroup 'Microsoft.ContainerInstance/containerGroups@2021-09-01'
               memoryInGB: memoryInGb
             }
           }
+          livenessProbe: {
+            httpGet: {
+              path: '/'
+              port: port
+              scheme: 'http'
+            }
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 3
+          }
+          readinessProbe: {
+            httpGet: {
+              path: '/'
+              port: port
+              scheme: 'http'
+            }
+            initialDelaySeconds: 15
+            periodSeconds: 15
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 3
+          }
         }
       }
     ]
