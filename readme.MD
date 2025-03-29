@@ -13,28 +13,41 @@ I chose Bicep over ARM templates for its improved readability and modularity. Th
 ## Implementation Details
 
 ### Container Image Creation
-I used the [example-flask-crud](https://github.com/gurkanakdeniz/example-flask-crud) repository as the base application. I containerized this application by:
-- Creating a Dockerfile with optimized layers
-- Building a container image with appropriate tags
-- Testing the image locally before pushing to Azure
+I used the [example-flask-crud](https://github.com/gurkanakdeniz/example-flask-crud) repository as the base application. I containerized this application with a custom Dockerfile:
 
 ```dockerfile
-# Dockerfile for Flask CRUD application
-FROM python:3.9-slim
+FROM mcr.microsoft.com/azure-functions/python:4-python3.9
 
 WORKDIR /app
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Copy from local directory rather than assuming a specific folder structure
+COPY . /app/
 
-COPY . .
+# Install dependencies - use requirements.txt from the Flask app
+RUN if [ -f requirements.txt ]; then pip install --no-cache-dir -r requirements.txt; fi
+
+# Create startup script
+RUN echo '#!/bin/bash' > /app/start.sh && \
+    echo 'cd /app' >> /app/start.sh && \
+    echo 'python -c "from app import db; db.create_all()"' >> /app/start.sh && \
+    echo 'python -m flask run --host=0.0.0.0 --port=80' >> /app/start.sh && \
+    chmod +x /app/start.sh
+
+ENV FLASK_APP=crudapp.py \
+    PYTHONUNBUFFERED=1 \
+    AzureWebJobsScriptRoot=/app \
+    FLASK_ENV=production
 
 EXPOSE 80
 
-ENV PORT=80
-
-CMD ["python", "app.py"]
+CMD ["/app/start.sh"]
 ```
+
+This Dockerfile:
+- Uses a Python 3.9 base image suitable for Azure Functions
+- Sets up a custom startup script to initialize the database and run Flask
+- Exposes port 80 for HTTP traffic
+- Configures necessary environment variables for Flask
 
 ### Deployment Automation
 I created a two-step deployment process:
@@ -43,21 +56,6 @@ I created a two-step deployment process:
    - Create a Service Principal with appropriate roles
    - Store credentials securely in a local file for automated deployments
    - This enabled non-interactive deployments with least-privilege principles
-
-```powershell
-# Service Principal creation snippet from set-credentials.ps1
-$sp = az ad sp create-for-rbac --name "sp-azure-bicep-deployer" --role Contributor --scopes "/subscriptions/$subscriptionId" | ConvertFrom-Json
-$credentials = @{
-    subscriptionId = $subscriptionId
-    tenantId = $sp.tenant
-    clientId = $sp.appId
-    clientSecret = $sp.password
-    appId = $sp.appId
-    password = $sp.password
-    tenant = $sp.tenant
-}
-$credentials | ConvertTo-Json | Set-Content -Path "sp-credentials.json"
-```
 
 2. **Deployment Script** - I wrote a comprehensive `deploy.ps1` script that:
    - Handles authentication fallback (checks if logged in, uses SP if available)
@@ -86,135 +84,113 @@ if (-not $loginStatus) {
 ### Bicep Implementation
 I created modular Bicep templates with a focus on maintainability and reuse:
 
-- **main.bicep**: Orchestrates the entire deployment by calling modules in the correct order
-- **acr.bicep**: Provisions an Azure Container Registry with proper access controls
-- **vnet.bicep**: Creates a virtual network with separate subnets for container instances and Application Gateway
-- **aci.bicep**: Deploys the container instance with health probes and resource constraints
-- **appgw.bicep**: Sets up Application Gateway with proper routing rules and backend pools
-- **loganalytics.bicep**: Configures logging and monitoring for all resources
+#### Container Instance Module (aci.bicep)
+This module deploys the container with appropriate configurations:
 
-Main Bicep orchestration:
 ```bicep
-// Main Bicep module calling other modules
-module nsgModule 'modules/nsg.bicep' = {
-  name: 'nsgDeployment'
-  params: {
-    location: location
-    nsgName: nsgName
-  }
-}
-
-module vnetModule 'modules/vnet.bicep' = {
-  name: 'vnetDeployment'
-  params: {
-    location: location
-    vnetName: vnetName
-    subnetName: subnetName
-    nsgId: nsgModule.outputs.nsgId
-    appGatewayNsgId: appGwNsgModule.outputs.nsgId
-  }
-}
-
-module aciModule 'modules/aci.bicep' = {
-  name: 'aciDeployment'
-  params: {
-    location: location
-    containerGroupName: containerGroupName
-    containerImageName: containerImageName
-    subnetId: vnetModule.outputs.subnetId
-    acrName: acrName
-    acrLoginServer: acrModule.outputs.acrLoginServer
-    logAnalyticsWorkspaceId: logAnalyticsModule.outputs.workspaceId
-    logAnalyticsWorkspaceName: logAnalyticsName
-  }
-}
-```
-
-VNet configuration:
-```bicep
-// Virtual Network and subnet configuration
-resource vnet 'Microsoft.Network/virtualNetworks@2021-05-01' = {
-  name: vnetName
+resource containerGroup 'Microsoft.ContainerInstance/containerGroups@2021-09-01' = {
+  name: containerGroupName
   location: location
   properties: {
-    addressSpace: {
-      addressPrefixes: [
-        '10.0.0.0/16'
-      ]
-    }
-    subnets: [
+    containers: [
       {
-        name: subnetName
+        name: 'flask-crud-container'
         properties: {
-          addressPrefix: '10.0.0.0/24'
-          networkSecurityGroup: {
-            id: nsgId
-          }
-          delegations: [
+          image: containerImageName
+          ports: [
             {
-              name: 'Microsoft.ContainerInstance.containerGroups'
-              properties: {
-                serviceName: 'Microsoft.ContainerInstance/containerGroups'
-              }
+              port: port
+              protocol: 'TCP'
             }
           ]
-        }
-      }
-      {
-        name: 'appgw-subnet'
-        properties: {
-          addressPrefix: '10.0.1.0/24'
-          networkSecurityGroup: {
-            id: appGatewayNsgId
+          resources: {
+            requests: {
+              cpu: cpuCores
+              memoryInGB: memoryInGb
+            }
+          }
+          livenessProbe: {
+            httpGet: {
+              path: '/'
+              port: port
+              scheme: 'http'
+            }
+            initialDelaySeconds: 30
+            periodSeconds: 30
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 3
+          }
+          readinessProbe: {
+            httpGet: {
+              path: '/'
+              port: port
+              scheme: 'http'
+            }
+            initialDelaySeconds: 15
+            periodSeconds: 15
+            timeoutSeconds: 5
+            successThreshold: 1
+            failureThreshold: 3
           }
         }
       }
     ]
+    osType: 'Linux'
+    restartPolicy: 'Always'
+    subnetIds: [
+      {
+        id: subnetId
+      }
+    ]
+    ipAddress: {
+      type: 'Private'
+      ports: [
+        {
+          port: port
+          protocol: 'TCP'
+        }
+      ]
+    }
   }
 }
 ```
 
-I ensured all resources used my initials (QDM) in their names to identify them easily. Each resource was properly tagged and configured with appropriate dependencies to ensure proper deployment order.
-
-### Network Security Implementation
-For security, I implemented:
-
-1. **Network Isolation**:
-   - Created a dedicated VNet with separate subnets
-   - Placed container instances in a private subnet
-   - Used NSGs to restrict traffic between subnets
+#### Network Security Group (nsg.bicep)
+This module implements security rules to protect the container:
 
 ```bicep
-// NSG rules for container subnet
 resource nsg 'Microsoft.Network/networkSecurityGroups@2021-05-01' = {
   name: nsgName
   location: location
   properties: {
     securityRules: [
       {
-        name: 'AllowHTTPFromAppGW'
+        name: 'AllowHTTP'
         properties: {
           priority: 100
-          direction: 'Inbound'
-          access: 'Allow'
           protocol: 'Tcp'
-          sourceAddressPrefix: '10.0.1.0/24'  // App Gateway subnet
+          access: 'Allow'
+          direction: 'Inbound'
+          sourceAddressPrefix: '*'
           sourcePortRange: '*'
           destinationAddressPrefix: '*'
           destinationPortRange: '80'
+          description: 'Allow HTTP traffic to the container'
         }
       }
       {
         name: 'DenyAllInbound'
         properties: {
-          priority: 1000
-          direction: 'Inbound'
-          access: 'Deny'
+          priority: 4096
           protocol: '*'
+          access: 'Deny'
+          direction: 'Inbound'
           sourceAddressPrefix: '*'
           sourcePortRange: '*'
           destinationAddressPrefix: '*'
           destinationPortRange: '*'
+          description: 'Deny all other inbound traffic'
         }
       }
     ]
@@ -222,32 +198,25 @@ resource nsg 'Microsoft.Network/networkSecurityGroups@2021-05-01' = {
 }
 ```
 
-2. **Traffic Filtering**:
-   - Created NSG rules to only allow HTTP/80 traffic to containers
-   - Restricted outbound traffic to essential services
-   - Configured Application Gateway to be the only entry point
-
-3. **HTTPS Configuration**:
-   - Set up Let's Encrypt certificate generation
-   - Configured SSL termination at the Application Gateway
-   - Implemented proper certificate management and renewal (documented in ssl_guide.md)
-
-### SSL/HTTPS Implementation
-I added HTTPS support to the application with the following features:
-
-1. **Application Gateway SSL Support**:
-   - Modified the Application Gateway Bicep template to support SSL certificates
-   - Configured HTTPS listeners and routing rules
-   - Implemented certificate handling in the deployment scripts
+#### Application Gateway with SSL (appgateway.bicep)
+This module configures the Application Gateway with HTTPS support:
 
 ```bicep
-// Application Gateway SSL configuration
-param enableHttps bool = false
-param sslCertificateData string = ''
-@secure()
-param sslCertificatePassword string = ''
-param httpsHostName string = ''
-
+frontendPorts: [
+  {
+    name: 'appGatewayFrontendPort'
+    properties: {
+      port: frontendPort
+    }
+  }
+  // Add HTTPS port if enabled
+  {
+    name: 'httpsPort'
+    properties: {
+      port: httpsPort
+    }
+  }
+]
 // Add SSL certificate if HTTPS is enabled
 sslCertificates: enableHttps ? [
   {
@@ -259,9 +228,20 @@ sslCertificates: enableHttps ? [
   }
 ] : []
 
-// HTTPS listener configuration
+// HTTPS listeners configuration
 httpListeners: concat([
-  // HTTP listener
+  {
+    name: 'flaskCrudListener'
+    properties: {
+      frontendIPConfiguration: {
+        id: resourceId('Microsoft.Network/applicationGateways/frontendIPConfigurations', appGatewayName, 'appGatewayFrontendIP')
+      }
+      frontendPort: {
+        id: resourceId('Microsoft.Network/applicationGateways/frontendPorts', appGatewayName, 'appGatewayFrontendPort')
+      }
+      protocol: 'Http'
+    }
+  }
 ], enableHttps ? [
   {
     name: 'httpsListener'
@@ -283,49 +263,75 @@ httpListeners: concat([
 ] : [])
 ```
 
+### Network Security Implementation
+For security, I implemented:
+
+1. **Network Isolation**:
+   - Created a dedicated VNet with separate subnets
+   - Placed container instances in a private subnet
+   - Used NSGs to restrict traffic between subnets
+
+2. **Traffic Filtering**:
+   - Created NSG rules to only allow HTTP/80 traffic to containers
+   - Restricted outbound traffic to essential services
+   - Configured Application Gateway to be the only entry point
+
+3. **HTTPS Configuration**:
+   - Set up Let's Encrypt certificate generation
+   - Configured SSL termination at the Application Gateway
+   - Implemented proper certificate management and renewal (documented in ssl_guide.md)
+
+### SSL/HTTPS Implementation
+I added HTTPS support to the application with the following features:
+
+1. **Application Gateway SSL Support**:
+   - Modified the Application Gateway Bicep template to support SSL certificates
+   - Configured HTTPS listeners and routing rules
+   - Implemented certificate handling in the deployment scripts
+
 2. **Let's Encrypt Integration**:
    - Used Let's Encrypt for free, trusted SSL certificates
    - Created scripts to automate certificate conversion and deployment
    - Documented the full process in ssl_guide.md
 
 3. **Deployment Options**:
-   - Created a dedicated `deploy-with-ssl.ps1` script for SSL deployments
-   - Added SSL parameters to the main deployment script
-   - Provided options in the parameters file for persistent SSL configuration
+   - Created a dedicated `deploy-with-ssl.ps1` script for SSL deployments:
 
 ```powershell
-# SSL certificate handling in deploy.ps1
-function Start-AzureDeployment {
-    # Handle SSL certificate configuration if provided
-    $sslParams = @{}
-    if (-not [string]::IsNullOrEmpty($SslCertPath) -and (Test-Path $SslCertPath)) {
-        Write-Host "Configuring SSL certificate for HTTPS..." -ForegroundColor Cyan
-        
-        # Convert certificate to base64
-        $certBytes = [System.IO.File]::ReadAllBytes($SslCertPath)
-        $base64Cert = [System.Convert]::ToBase64String($certBytes)
-        
-        # Add SSL parameters
-        $sslParams = @{
-            "enableHttps" = $true
-            "sslCertificateData" = $base64Cert
-            "sslCertificatePassword" = $SslCertPassword
-            "httpsHostName" = $HttpsHostName
-        }
-    }
+# Azure Infrastructure-as-Code Deployment Script with SSL certificate
+param (
+    [Parameter(Mandatory = $true)]
+    [string]$SslCertPath,
     
-    # Deployment command with SSL parameters
-    if ($sslParams.ContainsKey("sslCertificateData")) {
-        # Create a temporary parameter file with all parameters including the certificate
-        $tempParamsFile = [System.IO.Path]::GetTempFileName()
-        $allParams = Get-Content -Raw -Path $ParametersFile | ConvertFrom-Json
-        
-        # Add or update SSL parameters
-        # [...snipped for brevity...]
-        
-        # Use the temporary file for deployment
-        $deployCmd = "az deployment group create --resource-group $ResourceGroupName --template-file bicep/main.bicep --parameters @$tempParamsFile --name $deploymentName"
-    }
+    [Parameter(Mandatory = $true)]
+    [string]$SslCertPassword,
+    
+    [Parameter(Mandatory = $false)]
+    [string]$HttpsHostName = "iac.quinten-de-meyer.be",
+    
+    [Parameter(Mandatory = $false)]
+    [switch]$UseCredentialsFile
+)
+
+# Call the main deployment script with SSL parameters
+$deployParams = @{
+    SslCertPath = $SslCertPath
+    SslCertPassword = $SslCertPassword
+    HttpsHostName = $HttpsHostName
+}
+
+if ($UseCredentialsFile) {
+    $deployParams.Add("UseCredentialsFile", $true)
+}
+
+Write-Host "Starting deployment with SSL certificate..." -ForegroundColor Cyan
+
+# Execute the main deployment script with SSL parameters
+try {
+    & .\deploy.ps1 @deployParams
+} catch {
+    Write-Error "An error occurred during deployment: $_"
+    exit 1
 }
 ```
 
@@ -333,90 +339,6 @@ Example of deploying with SSL:
 ```powershell
 # Deploy with SSL certificate
 .\deploy-with-ssl.ps1 -SslCertPath "C:\temp\certificate.pfx" -SslCertPassword "YourSecretPassword" -HttpsHostName "iac.quinten-de-meyer.be"
-```
-
-### Container Instance Configuration
-The Azure Container Instance is deployed with health probes and resource constraints:
-
-```bicep
-// Container instance configuration
-resource containerGroup 'Microsoft.ContainerInstance/containerGroups@2021-10-01' = {
-  name: containerGroupName
-  location: location
-  properties: {
-    containers: [
-      {
-        name: '${containerName}-container'
-        properties: {
-          image: containerImageName
-          ports: [
-            {
-              port: 80
-              protocol: 'TCP'
-            }
-          ]
-          resources: {
-            requests: {
-              cpu: 1.0
-              memoryInGB: 1.0
-            }
-          }
-          livenessProbe: {
-            httpGet: {
-              path: '/'
-              port: 80
-              scheme: 'Http'
-            }
-            initialDelaySeconds: 30
-            periodSeconds: 30
-            failureThreshold: 3
-            successThreshold: 1
-            timeoutSeconds: 5
-          }
-          readinessProbe: {
-            httpGet: {
-              path: '/'
-              port: 80
-              scheme: 'Http'
-            }
-            initialDelaySeconds: 15
-            periodSeconds: 15
-            failureThreshold: 3
-            successThreshold: 1
-            timeoutSeconds: 5
-          }
-        }
-      }
-    ]
-    osType: 'Linux'
-    restartPolicy: 'Always'
-    ipAddress: {
-      type: 'Private'
-      ports: [
-        {
-          port: 80
-          protocol: 'TCP'
-        }
-      ]
-    }
-    subnetIds: [
-      {
-        id: subnetId
-      }
-    ]
-    imageRegistryCredentials: [
-      {
-        server: acrLoginServer
-        username: acrName
-      }
-    ]
-    diagnostics: {
-      logAnalytics: {
-        workspaceId: logAnalyticsWorkspaceId
-      }
-    }
-  }
-}
 ```
 
 ### Monitoring Setup
@@ -427,30 +349,6 @@ I implemented comprehensive monitoring:
 - Created dashboard visualizations for resource utilization
 - Enabled diagnostic settings on Application Gateway and NSGs
 
-```bicep
-// Log Analytics workspace configuration
-resource logAnalyticsWorkspace 'Microsoft.OperationalInsights/workspaces@2021-06-01' = {
-  name: logAnalyticsName
-  location: location
-  properties: {
-    sku: {
-      name: 'PerGB2018'
-    }
-    retentionInDays: 30
-    features: {
-      enableLogAccessUsingOnlyResourcePermissions: true
-    }
-  }
-}
-
-// Container diagnostics settings
-diagnostics: {
-  logAnalytics: {
-    workspaceId: logAnalyticsWorkspaceId
-  }
-}
-```
-
 ## Requirements Fulfillment
 
 ### 1. ACR with Bicep
@@ -459,40 +357,6 @@ I successfully created an Azure Container Registry with the following features:
 - Geo-replication disabled to save Azure credits
 - Admin account disabled for improved security
 - Implemented token-based authentication with least privilege
-
-```bicep
-// ACR with token for least privilege access
-resource acr 'Microsoft.ContainerRegistry/registries@2021-09-01' = {
-  name: acrName
-  location: location
-  sku: {
-    name: 'Standard'
-  }
-  properties: {
-    adminUserEnabled: false
-  }
-}
-
-// ACR token with pull-only permissions
-resource acrToken 'Microsoft.ContainerRegistry/registries/tokens@2021-09-01' = {
-  name: tokenName
-  parent: acr
-  properties: {
-    status: 'enabled'
-    scopeMapId: acrScopeMap.id
-  }
-}
-
-resource acrScopeMap 'Microsoft.ContainerRegistry/registries/scopeMaps@2021-09-01' = {
-  name: '${tokenName}-scopemap'
-  parent: acr
-  properties: {
-    actions: [
-      'repositories/*/content/read'
-    ]
-  }
-}
-```
 
 ### 2. ACI Deployment with Bicep
 The container deployment includes:
@@ -525,7 +389,7 @@ During the implementation, I encountered several challenges:
 2. **SSL Certificate Configuration**:
    - Problem: Let's Encrypt certificate required manual steps
    - Solution: Created detailed documentation (ssl_guide.md) for the process
-   - Solution: Enhanced Bicep templates to support SSL as part of IaC 
+   - Solution: Enhanced Bicep templates to support SSL as part of IaC
 
 3. **Image Deployment Timing**:
    - Problem: Container deployed before image was available
