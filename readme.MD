@@ -22,6 +22,65 @@ docker build -t flask-crud:latest .
 
 ### Step 2: Setup Azure Infrastructure with Bicep
 
+#### Deployment Workflow
+The deployment uses a two-step process for secure and automated infrastructure provisioning:
+
+1. **Create Service Principal Credentials** - First, run the setcredentials script which creates a Service Principal and saves the credentials to a local file:
+
+```powershell
+# Create service principal and store credentials
+.\setcredentials.ps1
+```
+
+2. **Run Deployment Script** - Then execute the main deployment script which:
+   - Checks if the user is logged in to Azure
+   - Uses the service principal if needed
+   - Creates the resource group
+   - Validates and deploys all Bicep templates
+   - Builds and pushes the container image
+   - Configures all required resources
+
+```powershell
+# Deploy the entire infrastructure
+.\deploy.ps1
+```
+
+The deployment script handles everything automatically, including:
+- Azure login validation
+- Resource group creation
+- Bicep template deployment
+- ACR authentication
+- Container image building and pushing
+- Error handling and deployment validation
+
+Here's a simplified snippet from the deploy.ps1 script:
+
+```powershell
+# Check if logged in to Azure
+$loginStatus = az account show --query "user.name" -o tsv 2>$null
+if (-not $loginStatus) {
+    Write-Host "Not logged in to Azure. Attempting to log in with service principal..."
+    if (Test-Path -Path "sp-credentials.json") {
+        $spCreds = Get-Content "sp-credentials.json" | ConvertFrom-Json
+        az login --service-principal --username $spCreds.appId --password $spCreds.password --tenant $spCreds.tenant
+    } else {
+        Write-Host "No service principal credentials found. Please log in interactively."
+        az login
+    }
+}
+
+# Create resource group if it doesn't exist
+$rgExists = az group exists --name rg-qdm-flask-crud
+if ($rgExists -eq "false") {
+    Write-Host "Creating resource group: rg-qdm-flask-crud"
+    az group create --name rg-qdm-flask-crud --location westeurope
+}
+
+# Deploy Bicep templates
+Write-Host "Deploying Bicep templates..."
+az deployment group create --resource-group rg-qdm-flask-crud --template-file main.bicep --no-wait
+```
+
 #### Resource Group Creation
 First, we create a resource group to contain all our Azure resources:
 
