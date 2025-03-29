@@ -47,13 +47,6 @@ $clientSecret = az keyvault secret show --vault-name "your-keyvault" --name "Ser
 
 For Azure resources that support it, use Managed Identities instead of service principals to eliminate the need for secret management entirely.
 
-## What was done to address the leaked credentials
-
-1. The compromised service principal secret (`qoz8Q~X0b_2dWbNEIS8dQ0Z3qubepMvoqSWLyaQB`) has been revoked
-2. A new secret has been generated and updated in the credentials file
-3. A `.gitignore` file has been added to prevent future credential leaks
-4. A `set-credentials.ps1` script has been created for secure credential handling
-
 ## Monitoring for suspicious activity
 
 Monitor your Azure Activity Logs for any suspicious activity related to the compromised credentials:
