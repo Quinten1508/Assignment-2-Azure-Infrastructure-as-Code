@@ -197,6 +197,7 @@ I created a two-step deployment process:
    - Create a Service Principal with appropriate roles
    - Store credentials securely in a local file for automated deployments
    - This enabled non-interactive deployments with least-privilege principles
+   - For detailed information on secure credential handling, see [SECURITY.md](./SECURITY.md)
 
 2. **Deployment Script** - I wrote a comprehensive `deploy.ps1` script that:
    - Handles authentication fallback (checks if logged in, uses SP if available)
