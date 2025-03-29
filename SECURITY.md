@@ -31,24 +31,6 @@ $subscriptionId = $env:AZURE_SUBSCRIPTION_ID
 $tenantId = $env:AZURE_TENANT_ID
 ```
 
-### 3. For production environments, use Azure Key Vault
-
-For more secure credential management in production, store secrets in Azure Key Vault:
-
-```powershell
-# Store the secret in Key Vault
-az keyvault secret set --vault-name "your-keyvault" --name "ServicePrincipalSecret" --value "your-secret"
-
-# Retrieve the secret in your scripts
-$clientSecret = az keyvault secret show --vault-name "your-keyvault" --name "ServicePrincipalSecret" --query "value" -o tsv
-```
-
-### 4. Consider using managed identities
-
-For Azure resources that support it, use Managed Identities instead of service principals to eliminate the need for secret management entirely.
-
-## Monitoring for suspicious activity
-
 Monitor your Azure Activity Logs for any suspicious activity related to the compromised credentials:
 
 ```powershell
