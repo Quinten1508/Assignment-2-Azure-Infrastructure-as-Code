@@ -379,22 +379,6 @@ For observability, I:
 - Set up diagnostic settings on all key resources
 - Implemented query-based alerting for critical conditions
 
-## Challenges and Solutions
-During the implementation, I encountered several challenges:
-
-1. **Container Networking Issues**:
-   - Problem: Initial deployment had connectivity issues between App Gateway and ACI
-   - Solution: Implemented custom route tables and fixed NSG rules
-
-2. **SSL Certificate Configuration**:
-   - Problem: Let's Encrypt certificate required manual steps
-   - Solution: Created detailed documentation (ssl_guide.md) for the process
-   - Solution: Enhanced Bicep templates to support SSL as part of IaC
-
-3. **Image Deployment Timing**:
-   - Problem: Container deployed before image was available
-   - Solution: Added dependency chains and validation checks in the deployment script
-
 ## Conclusion
 Through this assignment, I demonstrated my understanding of Infrastructure as Code using Bicep templates to deploy a containerized application to Azure. I implemented security best practices, optimized resource usage, and ensured proper monitoring capabilities.
 
