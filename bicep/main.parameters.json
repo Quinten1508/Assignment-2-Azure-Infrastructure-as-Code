@@ -13,6 +13,12 @@
                                               },
                        "acrName":  {
                                        "value":  "acrqdmcrud01"
-                                   }
+                                   },
+                       "enableHttps": {
+                                        "value": true
+                                    },
+                       "httpsHostName": {
+                                        "value": "iac.quinten-de-meyer.be"
+                                    }
                    }
 }

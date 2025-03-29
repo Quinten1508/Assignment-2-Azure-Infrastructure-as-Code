@@ -19,7 +19,16 @@ param (
     [string]$AcrSuffix = "01",
     
     [Parameter(Mandatory = $false)]
-    [switch]$UseCredentialsFile
+    [switch]$UseCredentialsFile,
+    
+    [Parameter(Mandatory = $false)]
+    [string]$SslCertPath = "",
+    
+    [Parameter(Mandatory = $false)]
+    [string]$SslCertPassword = "",
+    
+    [Parameter(Mandatory = $false)]
+    [string]$HttpsHostName = "iac.quinten-de-meyer.be"
 )
 
 # Set error action preference
@@ -183,47 +192,125 @@ function Start-AzureDeployment {
     # Update initials in parameters file
     $params.parameters.initials.value = $InitialsPrefix
     $params | ConvertTo-Json -Depth 10 | Set-Content -Path $ParametersFile
+    
+    # Handle SSL certificate configuration if provided
+    $sslParams = @{}
+    if (-not [string]::IsNullOrEmpty($SslCertPath) -and (Test-Path $SslCertPath)) {
+        Write-Host "Configuring SSL certificate for HTTPS..." -ForegroundColor Cyan
+        
+        # Convert certificate to base64
+        $certBytes = [System.IO.File]::ReadAllBytes($SslCertPath)
+        $base64Cert = [System.Convert]::ToBase64String($certBytes)
+        
+        # Add SSL parameters
+        $sslParams = @{
+            "enableHttps" = $true
+            "sslCertificateData" = $base64Cert
+            "sslCertificatePassword" = $SslCertPassword
+            "httpsHostName" = $HttpsHostName
+        }
+        
+        Write-Host "SSL certificate configured with hostname: $HttpsHostName" -ForegroundColor Green
+    }
 
     # Create a named deployment for easier reference
     $deploymentName = "deploy-$InitialsPrefix-$(Get-Date -Format 'yyMMddHHmm')"
     
+    # Prepare deployment parameters
+    $deploymentParams = @($ParametersFile)
+    foreach ($key in $sslParams.Keys) {
+        if ($key -eq "sslCertificateData") {
+            # Use a temporary file for the large certificate data
+            $tempFile = [System.IO.Path]::GetTempFileName()
+            Set-Content -Path $tempFile -Value $sslParams[$key]
+            $deploymentParams += "$key=@$tempFile"
+        } else {
+            $deploymentParams += "$key=$($sslParams[$key])"
+        }
+    }
+    
     # Deploy using the main Bicep template
     Write-Host "Starting deployment with name: $deploymentName" -ForegroundColor Cyan
-    az deployment group create `
-        --resource-group $ResourceGroupName `
-        --template-file bicep/main.bicep `
-        --parameters @$ParametersFile `
-        --parameters acrName=$acrName `
-        --name $deploymentName
+    
+    $deployCmd = "az deployment group create --resource-group $ResourceGroupName --template-file bicep/main.bicep --parameters @$ParametersFile --parameters acrName=$acrName"
+    
+    # Add SSL parameters if provided
+    foreach ($key in $sslParams.Keys) {
+        if ($key -eq "sslCertificateData") {
+            # Skip adding directly to command line due to size
+            continue
+        } elseif ($key -eq "sslCertificatePassword" -and -not [string]::IsNullOrEmpty($sslParams[$key])) {
+            $deployCmd += " --parameters $key=$($sslParams[$key])"
+        } elseif ($key -ne "sslCertificatePassword") {
+            $deployCmd += " --parameters $key=$($sslParams[$key])"
+        }
+    }
+    
+    $deployCmd += " --name $deploymentName"
+    
+    # If we have certificate data, use a different approach to pass it
+    if ($sslParams.ContainsKey("sslCertificateData")) {
+        # Create a temporary parameter file with all parameters including the certificate
+        $tempParamsFile = [System.IO.Path]::GetTempFileName()
+        $allParams = Get-Content -Raw -Path $ParametersFile | ConvertFrom-Json
+        
+        # Add or update SSL parameters
+        if (-not $allParams.parameters.PSObject.Properties["enableHttps"]) {
+            $allParams.parameters | Add-Member -NotePropertyName "enableHttps" -NotePropertyValue @{value = $true}
+        } else {
+            $allParams.parameters.enableHttps.value = $true
+        }
+        
+        if (-not $allParams.parameters.PSObject.Properties["sslCertificateData"]) {
+            $allParams.parameters | Add-Member -NotePropertyName "sslCertificateData" -NotePropertyValue @{value = $sslParams["sslCertificateData"]}
+        } else {
+            $allParams.parameters.sslCertificateData.value = $sslParams["sslCertificateData"]
+        }
+        
+        if (-not [string]::IsNullOrEmpty($SslCertPassword)) {
+            if (-not $allParams.parameters.PSObject.Properties["sslCertificatePassword"]) {
+                $allParams.parameters | Add-Member -NotePropertyName "sslCertificatePassword" -NotePropertyValue @{value = $SslCertPassword}
+            } else {
+                $allParams.parameters.sslCertificatePassword.value = $SslCertPassword
+            }
+        }
+        
+        if (-not [string]::IsNullOrEmpty($HttpsHostName)) {
+            if (-not $allParams.parameters.PSObject.Properties["httpsHostName"]) {
+                $allParams.parameters | Add-Member -NotePropertyName "httpsHostName" -NotePropertyValue @{value = $HttpsHostName}
+            } else {
+                $allParams.parameters.httpsHostName.value = $HttpsHostName
+            }
+        }
+        
+        # Write the updated parameters to the temp file
+        $allParams | ConvertTo-Json -Depth 10 | Set-Content -Path $tempParamsFile
+        
+        # Use the temporary file for deployment
+        $deployCmd = "az deployment group create --resource-group $ResourceGroupName --template-file bicep/main.bicep --parameters @$tempParamsFile --name $deploymentName"
+    }
+    
+    # Execute the deployment command
+    Invoke-Expression $deployCmd
+    
+    # Clean up any temporary files
+    if (Test-Path $tempFile) { Remove-Item $tempFile -Force }
+    if (Test-Path $tempParamsFile) { Remove-Item $tempParamsFile -Force }
 
     if ($LASTEXITCODE -ne 0) {
         Write-Error "Failed to deploy Azure resources"
         exit 1
     }
-
-    # Get the container IP address
-    $containerIp = az deployment group show `
+    
+    # Get the output values from the deployment
+    Write-Host "Retrieving deployment outputs..." -ForegroundColor Cyan
+    $outputs = az deployment group show `
         --resource-group $ResourceGroupName `
         --name $deploymentName `
-        --query properties.outputs.containerIPv4Address.value -o tsv
-
-    # Get Application Gateway information
-    $appGatewayPublicIp = az deployment group show `
-        --resource-group $ResourceGroupName `
-        --name $deploymentName `
-        --query properties.outputs.appGatewayPublicIp.value -o tsv
-
-    $appGatewayFqdn = az deployment group show `
-        --resource-group $ResourceGroupName `
-        --name $deploymentName `
-        --query properties.outputs.appGatewayFQDN.value -o tsv
-
-    Write-Host "Deployment completed successfully!" -ForegroundColor Green
-    Write-Host "Your Flask CRUD app has been deployed with a private IP: $containerIp" -ForegroundColor Cyan
-    Write-Host "The Application Gateway has been configured to provide public access to your app." -ForegroundColor Green
-    Write-Host "You can access the Flask CRUD app publicly at:" -ForegroundColor Green
-    Write-Host "  - Public IP: http://$appGatewayPublicIp" -ForegroundColor Cyan
-    Write-Host "  - DNS Name: http://$appGatewayFqdn" -ForegroundColor Cyan
+        --query properties.outputs `
+        -o json | ConvertFrom-Json
+    
+    return $outputs
 }
 
 # Create an ACR token with least privilege access
@@ -261,60 +348,74 @@ function Test-ServicePrincipalCredentials {
     return $true
 }
 
-# Main execution flow
-Write-Host "Starting Azure Infrastructure-as-Code deployment for Flask CRUD app" -ForegroundColor Green
-Write-Host "Using initials: $InitialsPrefix" -ForegroundColor Green
-Write-Host "Using ACR suffix: $AcrSuffix" -ForegroundColor Green
-
-# Check if Azure CLI is installed
+# Main execution
 try {
-    az --version | Out-Null
-}
-catch {
-    Write-Error "Azure CLI is not installed. Please install it before running this script."
-    exit 1
-}
-
-# Check if Docker is installed
-try {
-    docker --version | Out-Null
-}
-catch {
-    Write-Error "Docker is not installed. Please install it before running this script."
-    exit 1
-}
-
-# Check for authentication method
-$useServicePrincipal = Test-ServicePrincipalCredentials
-if ($useServicePrincipal) {
-    Write-Host "Using service principal authentication with environment variables" -ForegroundColor Cyan
-    # Login with service principal
-    az login --service-principal `
-        --username $env:AZURE_CLIENT_ID `
-        --password $env:AZURE_CLIENT_SECRET `
-        --tenant $env:AZURE_TENANT_ID | Out-Null
+    # Check if logged in to Azure
+    $loginStatus = az account show --query "user.name" -o tsv 2>$null
+    if (-not $loginStatus) {
+        Write-Host "Not logged in to Azure. Attempting to log in with service principal..." -ForegroundColor Yellow
+        if ($UseCredentialsFile -and (Test-Path "./sp-credentials.json")) {
+            $creds = Get-Content -Raw -Path "./sp-credentials.json" | ConvertFrom-Json
+            Write-Host "Logging in with service principal..." -ForegroundColor Cyan
+            az login --service-principal --username $creds.appId --password $creds.password --tenant $creds.tenant
+        } else {
+            Write-Host "Logging in to Azure..." -ForegroundColor Cyan
+            az login
+        }
+        
+        if ($LASTEXITCODE -ne 0) {
+            Write-Error "Failed to login to Azure"
+            exit 1
+        }
+    } else {
+        Write-Host "Already logged in as: $loginStatus" -ForegroundColor Green
+    }
     
-    if ($env:AZURE_SUBSCRIPTION_ID) {
-        az account set --subscription $env:AZURE_SUBSCRIPTION_ID
+    # Set the subscription if specified in credentials
+    if ($UseCredentialsFile -and (Test-Path "./sp-credentials.json")) {
+        $creds = Get-Content -Raw -Path "./sp-credentials.json" | ConvertFrom-Json
+        if ($creds.subscriptionId) {
+            Write-Host "Setting subscription to: $($creds.subscriptionId)" -ForegroundColor Cyan
+            az account set --subscription $creds.subscriptionId
+        }
     }
-} else {
-    # Check if logged in to Azure using interactive login
-    az account show 2>&1 | Out-Null
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "Not logged in to Azure. Please run 'az login' first or use the -UseCredentialsFile parameter." -ForegroundColor Yellow
-        Write-Host "You can also run '.\set-credentials.ps1' to set up environment variables for service principal authentication." -ForegroundColor Yellow
-        az login
+    
+    # Check if resource group exists, create if not
+    $rgExists = az group exists --name $ResourceGroupName
+    if ($rgExists -eq "false") {
+        New-ResourceGroup
+    } else {
+        Write-Host "Using existing resource group: $ResourceGroupName" -ForegroundColor Green
     }
-}
-
-# Execute deployment steps
-New-ResourceGroup
-Import-FlaskCrudRepo
-$containerResult = New-ContainerImage
-New-ACRToken -acrName $containerResult.AcrName
-Start-AzureDeployment -fullImageName $containerResult.FullImageName -acrName $containerResult.AcrName
-
-Write-Host "Deployment completed successfully!" -ForegroundColor Green
-Write-Host "IMPORTANT: Remember to clean up resources after demonstration to save Azure credits" -ForegroundColor Yellow
-Write-Host "Run the following command to delete all resources:" -ForegroundColor Yellow
-Write-Host "az group delete --name $ResourceGroupName --yes" -ForegroundColor Yellow 
+    
+    # Clone the Flask CRUD repository if necessary
+    Import-FlaskCrudRepo
+    
+    # Build and push the container image
+    $containerInfo = New-ContainerImage
+    
+    # Deploy Azure resources using Bicep
+    $deploymentOutputs = Start-AzureDeployment -fullImageName $containerInfo.FullImageName -acrName $containerInfo.AcrName
+    
+    # Display the deployment results
+    Write-Host "Deployment completed successfully!" -ForegroundColor Green
+    Write-Host "Your Flask CRUD app has been deployed with a private IP: $($deploymentOutputs.containerIPv4Address.value)" -ForegroundColor Cyan
+    Write-Host "The Application Gateway has been configured to provide public access to your app." -ForegroundColor Green
+    Write-Host "You can access the Flask CRUD app publicly at:" -ForegroundColor Green
+    Write-Host "  - Public IP: http://$($deploymentOutputs.appGatewayPublicIp.value)" -ForegroundColor Cyan
+    Write-Host "  - DNS Name: http://$($deploymentOutputs.appGatewayFQDN.value)" -ForegroundColor Cyan
+    
+    # If HTTPS is enabled, show HTTPS URL too
+    $params = Get-Content -Raw -Path $ParametersFile | ConvertFrom-Json
+    if ($params.parameters.enableHttps -and $params.parameters.enableHttps.value -eq $true) {
+        Write-Host "HTTPS has been configured. You can also access your app securely at:" -ForegroundColor Green
+        if ($params.parameters.httpsHostName -and -not [string]::IsNullOrEmpty($params.parameters.httpsHostName.value)) {
+            Write-Host "  - HTTPS URL: https://$($params.parameters.httpsHostName.value)" -ForegroundColor Cyan
+        } else {
+            Write-Host "  - HTTPS URL: https://$($deploymentOutputs.appGatewayPublicIp.value)" -ForegroundColor Cyan
+        }
+    }
+} catch {
+    Write-Error "An error occurred: $_"
+    exit 1
+} 

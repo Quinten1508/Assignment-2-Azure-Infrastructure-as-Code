@@ -80,6 +80,30 @@ For security, I implemented:
    - Configured SSL termination at the Application Gateway
    - Implemented proper certificate management and renewal (documented in ssl_guide.md)
 
+### SSL/HTTPS Implementation
+I added HTTPS support to the application with the following features:
+
+1. **Application Gateway SSL Support**:
+   - Modified the Application Gateway Bicep template to support SSL certificates
+   - Configured HTTPS listeners and routing rules
+   - Implemented certificate handling in the deployment scripts
+
+2. **Let's Encrypt Integration**:
+   - Used Let's Encrypt for free, trusted SSL certificates
+   - Created scripts to automate certificate conversion and deployment
+   - Documented the full process in ssl_guide.md
+
+3. **Deployment Options**:
+   - Created a dedicated `deploy-with-ssl.ps1` script for SSL deployments
+   - Added SSL parameters to the main deployment script
+   - Provided options in the parameters file for persistent SSL configuration
+
+Example of deploying with SSL:
+```powershell
+# Deploy with SSL certificate
+.\deploy-with-ssl.ps1 -SslCertPath "C:\temp\certificate.pfx" -SslCertPassword "YourSecretPassword" -HttpsHostName "iac.quinten-de-meyer.be"
+```
+
 ### Monitoring Setup
 I implemented comprehensive monitoring:
 

@@ -15,6 +15,22 @@ param appGatewaySubnetId string
 @description('Frontend port for HTTP')
 param frontendPort int = 80
 
+@description('Frontend port for HTTPS')
+param httpsPort int = 443
+
+@description('Enable HTTPS')
+param enableHttps bool = false
+
+@description('SSL certificate data in Base64 format')
+param sslCertificateData string = ''
+
+@description('SSL certificate password')
+@secure()
+param sslCertificatePassword string = ''
+
+@description('Host name for the HTTPS listener')
+param httpsHostName string = ''
+
 // Create the public IP for the Application Gateway
 resource publicIP 'Microsoft.Network/publicIPAddresses@2021-05-01' = {
   name: '${appGatewayName}-pip'
@@ -68,7 +84,24 @@ resource appGateway 'Microsoft.Network/applicationGateways@2021-05-01' = {
           port: frontendPort
         }
       }
+      // Add HTTPS port if enabled
+      {
+        name: 'httpsPort'
+        properties: {
+          port: httpsPort
+        }
+      }
     ]
+    // Add SSL certificate if HTTPS is enabled
+    sslCertificates: enableHttps ? [
+      {
+        name: 'iacCertificate'
+        properties: {
+          data: sslCertificateData
+          password: sslCertificatePassword
+        }
+      }
+    ] : []
     backendAddressPools: [
       {
         name: 'flaskCrudBackendPool'
@@ -96,7 +129,7 @@ resource appGateway 'Microsoft.Network/applicationGateways@2021-05-01' = {
         }
       }
     ]
-    httpListeners: [
+    httpListeners: concat([
       {
         name: 'flaskCrudListener'
         properties: {
@@ -109,8 +142,26 @@ resource appGateway 'Microsoft.Network/applicationGateways@2021-05-01' = {
           protocol: 'Http'
         }
       }
-    ]
-    requestRoutingRules: [
+    ], enableHttps ? [
+      {
+        name: 'httpsListener'
+        properties: {
+          frontendIPConfiguration: {
+            id: resourceId('Microsoft.Network/applicationGateways/frontendIPConfigurations', appGatewayName, 'appGatewayFrontendIP')
+          }
+          frontendPort: {
+            id: resourceId('Microsoft.Network/applicationGateways/frontendPorts', appGatewayName, 'httpsPort')
+          }
+          protocol: 'Https'
+          sslCertificate: {
+            id: resourceId('Microsoft.Network/applicationGateways/sslCertificates', appGatewayName, 'iacCertificate')
+          }
+          hostName: httpsHostName
+          requireServerNameIndication: !empty(httpsHostName)
+        }
+      }
+    ] : [])
+    requestRoutingRules: concat([
       {
         name: 'flaskCrudRoutingRule'
         properties: {
@@ -127,7 +178,24 @@ resource appGateway 'Microsoft.Network/applicationGateways@2021-05-01' = {
           priority: 100
         }
       }
-    ]
+    ], enableHttps ? [
+      {
+        name: 'httpsRule'
+        properties: {
+          ruleType: 'Basic'
+          httpListener: {
+            id: resourceId('Microsoft.Network/applicationGateways/httpListeners', appGatewayName, 'httpsListener')
+          }
+          backendAddressPool: {
+            id: resourceId('Microsoft.Network/applicationGateways/backendAddressPools', appGatewayName, 'flaskCrudBackendPool')
+          }
+          backendHttpSettings: {
+            id: resourceId('Microsoft.Network/applicationGateways/backendHttpSettingsCollection', appGatewayName, 'flaskCrudHttpSettings')
+          }
+          priority: 200
+        }
+      }
+    ] : [])
     probes: [
       {
         name: 'flaskCrudHealthProbe'

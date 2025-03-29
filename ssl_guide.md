@@ -51,6 +51,43 @@ az network application-gateway http-listener create --name httpsListener --front
 az network application-gateway rule create --gateway-name appgw-qdm-flask --name httpsRule --resource-group rg-qdm-flask-crud --http-listener httpsListener --rule-type Basic --address-pool flaskCrudBackendPool --http-settings flaskCrudHttpSettings --priority 100
 ```
 
+## Automating SSL Deployment with Bicep
+
+The updated Bicep templates now support automatic SSL configuration during deployment. To use this feature:
+
+### Option 1: Using deploy-with-ssl.ps1
+
+The repository includes a helper script to easily deploy with SSL certificates:
+
+```powershell
+.\deploy-with-ssl.ps1 -SslCertPath "C:\temp\certificate.pfx" -SslCertPassword "YourPasswordHere" -HttpsHostName "iac.quinten-de-meyer.be"
+```
+
+This will run the deployment with HTTPS enabled and configure the Application Gateway with your SSL certificate.
+
+### Option 2: Using deploy.ps1 with SSL parameters
+
+You can also use the main deployment script with SSL parameters:
+
+```powershell
+.\deploy.ps1 -SslCertPath "C:\temp\certificate.pfx" -SslCertPassword "YourPasswordHere" -HttpsHostName "iac.quinten-de-meyer.be"
+```
+
+### Option 3: Redeploying with main.parameters.json
+
+If you've already enabled HTTPS in your parameters file (bicep/main.parameters.json), you can simply run the deployment:
+
+```powershell
+# Update the parameters file to enable HTTPS
+$params = Get-Content -Raw -Path "bicep/main.parameters.json" | ConvertFrom-Json
+$params.parameters.enableHttps.value = $true
+$params.parameters.httpsHostName.value = "iac.quinten-de-meyer.be"
+$params | ConvertTo-Json -Depth 10 | Set-Content -Path "bicep/main.parameters.json"
+
+# Run the deployment
+.\deploy.ps1
+```
+
 ## Certificate Renewal Process
 
 Let's Encrypt certificates are valid for 90 days. To renew:

@@ -38,6 +38,20 @@ param containerImageName string = '${acrName}.azurecr.io/flask-crud:latest'
 @description('ACR token name with pull permissions')
 param acrTokenName string = 'acrpull-token'
 
+// SSL Configuration parameters
+@description('Enable HTTPS on the Application Gateway')
+param enableHttps bool = false
+
+@description('SSL certificate data in Base64 format for HTTPS')
+param sslCertificateData string = ''
+
+@description('SSL certificate password')
+@secure()
+param sslCertificatePassword string = ''
+
+@description('Host name for HTTPS listener (e.g., iac.quinten-de-meyer.be)')
+param httpsHostName string = ''
+
 // Network Security Group for Container Subnet
 module nsgModule 'modules/nsg.bicep' = {
   name: 'nsgDeployment'
@@ -121,6 +135,10 @@ module appGatewayModule 'modules/appgateway.bicep' = {
     appGatewayName: appGatewayName
     backendIpAddress: aciModule.outputs.containerIPv4Address
     appGatewaySubnetId: vnetModule.outputs.appGatewaySubnetId
+    enableHttps: enableHttps
+    sslCertificateData: sslCertificateData
+    sslCertificatePassword: sslCertificatePassword
+    httpsHostName: httpsHostName
   }
 }
 
