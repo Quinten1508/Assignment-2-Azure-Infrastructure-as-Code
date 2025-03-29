@@ -393,16 +393,6 @@ I went beyond the basic requirements to implement additional security and usabil
    - Configured DNS records and domain validation
    - Integrated domain with SSL certificate for secure access
 
-3. **Enhanced Security**:
-   - Implemented proper network isolation with private subnets
-   - Set up Service Principal with least privilege access
-   - Created comprehensive security rules to protect all resources
-
-4. **Advanced Monitoring**:
-   - Implemented query-based alerting for critical conditions
-   - Created dashboard visualizations for resource utilization
-   - Set up diagnostic settings on all key Azure resources
-
 All resources were named following the required convention with my initials, and I ensured optimization of resource consumption to save Azure credits.
 
 ## Conclusion
