@@ -539,6 +539,34 @@ I went beyond the basic requirements to implement additional security and usabil
 
 All resources were named following the required convention with my initials, and I ensured optimization of resource consumption to save Azure credits.
 
+## Azure Resources
+
+Below is a list of all Azure resources deployed in the `rg-qdm-flask-crud` resource group located in West Europe region:
+
+| Resource Name | Type | Purpose |
+|---------------|------|---------|
+| aci-qdm-flask-crud | Container instances | The main container instance running the Flask CRUD application. This resource hosts the containerized application and executes the business logic. |
+| acrqdmcrud01 | Container registry | Serves as a private container repository for storing the Flask CRUD application container image. This allows secure, private storage and versioning of the container image. |
+| appgw-qdm-flask | Application gateway | Functions as the front-end load balancer and web application firewall, routing HTTP/HTTPS traffic to the container instance. Also provides SSL termination for secure HTTPS connections. |
+| appgw-qdm-flask-pip | Public IP address | Provides the public-facing IP address attached to the Application Gateway. This is the entry point for all external traffic to the application. |
+| appgw-qdm-nsg | Network security group | Protects the Application Gateway subnet by controlling inbound and outbound network traffic according to security rules. |
+| la-QDM-crud | Log Analytics workspace | Collects and analyzes container and application logs, enabling monitoring and troubleshooting of the application. |
+| subnet-qdm-aci-nsg | Network security group | Secures the container instance subnet by enforcing network traffic rules, ensuring only authorized communication to and from the container. |
+| vnet-qdm-crud | Virtual network | Provides network isolation for all components of the solution, separating the application into appropriate network segments. |
+
+### Requirements Checklist
+
+✅ Step 1: Completed MS Learn tutorials on IaC and Bicep  
+✅ Step 2: Built container image based on example-flask-crud  
+✅ Step 3: Created ACR using Bicep and implemented token with least privilege  
+✅ Step 4: Deployed container to ACI using Bicep  
+✅ Step 5: Implemented best practices:  
+   ✅ Application running in dedicated VNet and subnet  
+   ✅ Application has public IP (via Application Gateway)  
+   ✅ Application serves HTTP on port 80  
+   ✅ Only required traffic allowed (via NSGs)  
+   ✅ Container logs sent to Azure Monitor (via Log Analytics)
+
 ## Conclusion
 Through this assignment, I demonstrated my understanding of Infrastructure as Code using Bicep templates to deploy a containerized application to Azure. I implemented security best practices, optimized resource usage, and ensured proper monitoring capabilities.
 
