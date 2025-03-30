@@ -10,6 +10,35 @@ I chose Bicep over ARM templates for its improved readability and modularity. Th
 
 *The architecture diagram was created using diagrams.net with the Azure Icon set, showing all components and their relationships.*
 
+### Network Security Configuration
+
+#### Application Gateway NSG (appgw-qdm-nsg) - Inbound Rules
+
+| Name | Access | Description | Destination | Port Range | Priority | Protocol | Source |
+|------|--------|-------------|-------------|------------|----------|----------|--------|
+| AllowHTTP | Allow | Allow HTTP traffic | * | 80 | 100 | Tcp | * |
+| AllowHTTPS | Allow | Allow HTTPS traffic | * | 443 | 110 | Tcp | * |
+| AllowGatewayManager | Allow | Allow Azure Gateway Manager traffic | * | 65200-65535 | 120 | Tcp | GatewayManager |
+| AllowLoadBalancer | Allow | Allow Azure Load Balancer traffic | * | * | 130 | Tcp | AzureLoadBalancer |
+
+#### Container Subnet NSG (subnet-qdm-aci-nsg) - Inbound Rules
+
+| Name | Access | Description | Destination | Port Range | Priority | Protocol | Source |
+|------|--------|-------------|-------------|------------|----------|----------|--------|
+| AllowHTTP | Allow | Allow HTTP traffic to the container | * | 80 | 100 | Tcp | * |
+| DenyAllInbound | Deny | Deny all other inbound traffic | * | * | 4096 | * | * |
+
+#### Network Configuration
+
+| Resource | Configuration | Details |
+|----------|--------------|---------|
+| Virtual Network | Address Space | 10.0.0.0/16 (implied from subnet ranges) |
+| Subnet 1 | Address Range | 10.0.0.0/24 |
+| Subnet 2 | Address Range | 10.0.1.0/24 |
+| Container Instance | IP Address | 10.0.0.4 (deployed in VNet) |
+
+The network security configuration implements defense-in-depth principles with layered security controls. The Application Gateway NSG allows essential management traffic in addition to HTTP/HTTPS, while the Container Subnet NSG is more restrictive, allowing only HTTP traffic on port 80 and explicitly denying all other inbound connections. The container is deployed with a private IP (10.0.0.4) within the VNet, demonstrating proper network isolation.
+
 ## Implementation Details
 
 ### Container Image Creation
