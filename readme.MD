@@ -28,6 +28,19 @@ I chose Bicep over ARM templates for its improved readability and modularity. Th
 | AllowHTTP | Allow | Allow HTTP traffic to the container | * | 80 | 100 | Tcp | * |
 | DenyAllInbound | Deny | Deny all other inbound traffic | * | * | 4096 | * | * |
 
+#### Default Outbound Rules (Both NSGs)
+
+| Name | Access | Description | Priority | Protocol | Source | Destination |
+|------|--------|-------------|----------|----------|--------|-------------|
+| AllowVnetOutBound | Allow | Allow outbound traffic within VNet | 65000 | * | VirtualNetwork | VirtualNetwork |
+| AllowInternetOutBound | Allow | Allow outbound internet traffic | 65001 | * | * | Internet |
+| DenyAllOutBound | Deny | Deny all other outbound traffic | 65500 | * | * | * |
+
+These outbound rules are critical for proper application function:
+- VNet outbound traffic allows communication between the Application Gateway and container instances
+- Internet outbound access enables the container to pull images from ACR and send logs to Azure Monitor
+- The default deny rule ensures that only authorized outbound paths are allowed
+
 #### Network Configuration
 
 | Resource | Configuration | Details |
